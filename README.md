@@ -78,17 +78,17 @@ daily-descent/
 
 For more in-depth architectural and mechanical details, consult the spec sheets in the `docs/` directory:
 
-* [01-core-loop.md](file:///z:/home/lx_singw/projects/daily-descent/docs/01-core-loop.md) — Detailed user-experience flows and loop mechanics.
-* [02-mvp-scope.md](file:///z:/home/lx_singw/projects/daily-descent/docs/02-mvp-scope.md) — Scope breakdown across feature horizons and delivery cuts.
-* [03-architecture.md](file:///z:/home/lx_singw/projects/daily-descent/docs/03-architecture.md) — Client-server API splits, data definitions, and tech decisions.
-* [04-risks-and-validation.md](file:///z:/home/lx_singw/projects/daily-descent/docs/04-risks-and-validation.md) — Platform risk checklist and mitigation strategies.
-* [05-post-mvp-platform-vision.md](file:///z:/home/lx_singw/projects/daily-descent/docs/05-post-mvp-platform-vision.md) — Multi-game growth strategy and long-term vision.
-* [06-prd.md](file:///z:/home/lx_singw/projects/daily-descent/docs/06-prd.md) — Product requirement document (personas, metrics, balance specs).
-* [07-roadmap.md](file:///z:/home/lx_singw/projects/daily-descent/docs/07-roadmap.md) — Full phased timeline from Phase 0 to Phase 4.
-* [08-repo-structure.md](file:///z:/home/lx_singw/projects/daily-descent/docs/08-repo-structure.md) — Detailed mapping of files, folders, and components.
-* [09-devops-and-deployment.md](file:///z:/home/lx_singw/projects/daily-descent/docs/09-devops-and-deployment.md) — Branch strategies, visibility flips, rollback flows, and CI checks.
-* [10-env-vars.md](file:///z:/home/lx_singw/projects/daily-descent/docs/10-env-vars.md) — Source of truth for config keys and environment variables.
-* [11-testing-strategy.md](file:///z:/home/lx_singw/projects/daily-descent/docs/11-testing-strategy.md) — Test priority groups, whitelists, and failure closed loops.
+* [01-core-loop.md](docs/01-core-loop.md) — Detailed user-experience flows and loop mechanics.
+* [02-mvp-scope.md](docs/02-mvp-scope.md) — Scope breakdown across feature horizons and delivery cuts.
+* [03-architecture.md](docs/03-architecture.md) — Client-server API splits, data definitions, and tech decisions.
+* [04-risks-and-validation.md](docs/04-risks-and-validation.md) — Platform risk checklist and mitigation strategies.
+* [05-post-mvp-platform-vision.md](docs/05-post-mvp-platform-vision.md) — Multi-game growth strategy and long-term vision.
+* [06-prd.md](docs/06-prd.md) — Product requirement document (personas, metrics, balance specs).
+* [07-roadmap.md](docs/07-roadmap.md) — Full phased timeline from Phase 0 to Phase 4.
+* [08-repo-structure.md](docs/08-repo-structure.md) — Detailed mapping of files, folders, and components.
+* [09-devops-and-deployment.md](docs/09-devops-and-deployment.md) — Branch strategies, visibility flips, rollback flows, and CI checks.
+* [10-env-vars.md](docs/10-env-vars.md) — Source of truth for config keys and environment variables.
+* [11-testing-strategy.md](docs/11-testing-strategy.md) — Test priority groups, whitelists, and failure closed loops.
 
 ---
 
@@ -101,5 +101,5 @@ For more in-depth architectural and mechanical details, consult the spec sheets 
 ### Run Tests
 The testing suite verifies determinism, path validation, speed limits, and day rotation locks using Vitest:
 ```bash
-npm run test
+pnpm test
 ```

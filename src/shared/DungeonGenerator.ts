@@ -41,6 +41,7 @@ export class DungeonGenerator {
   public height = 60; // Total dungeon height in tiles
   public grid: number[][]; // 0 = floor/walkable, 1 = wall/blocked
   private rand: SeededRandom;
+  private startPosition: { x: number; y: number } = { x: 4, y: 4 };
 
   constructor(seed: string) {
     this.rand = new SeededRandom(seed);
@@ -77,6 +78,24 @@ export class DungeonGenerator {
         for (let ry = y; ry < y + h; ry++) {
           for (let rx = x; rx < x + w; rx++) {
             this.grid[ry][rx] = 0;
+          }
+        }
+      }
+    }
+
+    // Determine a dynamic, valid start position (center of first room)
+    if (rooms.length > 0) {
+      this.startPosition = {
+        x: Math.floor(rooms[0].x + rooms[0].w / 2),
+        y: Math.floor(rooms[0].y + rooms[0].h / 2)
+      };
+    } else {
+      // Fallback: search grid for any carved floor
+      outerLoop: for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          if (this.grid[y][x] === 0) {
+            this.startPosition = { x, y };
+            break outerLoop;
           }
         }
       }
@@ -122,6 +141,6 @@ export class DungeonGenerator {
    * Gets a valid starting position (the center of the first generated room).
    */
   public getStartPosition(): { x: number; y: number } {
-    return { x: 4, y: 4 }; // Fallback starting anchor if generation fails
+    return this.startPosition;
   }
 }

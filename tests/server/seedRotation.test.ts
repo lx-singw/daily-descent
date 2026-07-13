@@ -78,14 +78,14 @@ describe('Lazy Seed Rotation & Rollover Locks', () => {
     const runTimestamp = new Date('2026-07-12T23:55:00Z').getTime();
     
     // Pre-warm the seeds
-    const seedJuly 12 = await getOrCreateDailySeed(mockContext, 't3_testpost', '2026-07-12');
-    const seedJuly 13 = await getOrCreateDailySeed(mockContext, 't3_testpost', '2026-07-13');
+    const seedJuly12 = await getOrCreateDailySeed(mockContext, 't3_testpost', '2026-07-12');
+    const seedJuly13 = await getOrCreateDailySeed(mockContext, 't3_testpost', '2026-07-13');
 
     // Validation should succeed if we validate with the seed from July 12, even if it is currently July 13
-    const isValidYesterday = await validateRunSeed(mockContext, 't3_testpost', seedJuly 12, runTimestamp);
+    const isValidYesterday = await validateRunSeed(mockContext, 't3_testpost', seedJuly12, runTimestamp);
     expect(isValidYesterday).toBe(true);
 
-    const isValidToday = await validateRunSeed(mockContext, 't3_testpost', seedJuly 13, runTimestamp);
+    const isValidToday = await validateRunSeed(mockContext, 't3_testpost', seedJuly13, runTimestamp);
     expect(isValidToday).toBe(true);
 
     // Some random seed should be rejected

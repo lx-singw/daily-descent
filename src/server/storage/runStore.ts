@@ -1,6 +1,6 @@
 import { Devvit } from '@devvit/public-api';
 import { RunResult, LeaderboardEntry, DecodedGhostTrail } from '../../shared/types.js';
-import { REDIS_PREFIX, MAX_LEADERBOARD_ENTRIES, MAX_GHOST_TRAILS_PER_SEED } from '../../shared/constants.js';
+import { REDIS_PREFIX, MAX_LEADERBOARD_ENTRIES, MAX_GHOST_TRAILS_PER_SEED, TTL_DAILY_KEYS_SEC, TTL_GHOST_TRAILS_SEC } from '../../shared/constants.js';
 
 /**
  * Calculates a single numeric score for Redis sorted sets combining depth and duration.
@@ -73,6 +73,11 @@ export async function submitRun(
       await context.redis.zRem(ghostTrailsKey, oldestTrails);
     }
   }
+
+  // Apply Redis TTLs to prevent unbounded memory growth over days
+  await context.redis.expire(scoresKey, TTL_DAILY_KEYS_SEC);
+  await context.redis.expire(detailsKey, TTL_DAILY_KEYS_SEC);
+  await context.redis.expire(ghostTrailsKey, TTL_GHOST_TRAILS_SEC);
 }
 
 /**
@@ -86,11 +91,8 @@ export async function getDailyLeaderboard(
   const scoresKey = `${REDIS_PREFIX.LEADERBOARD}scores:${postId}:${dateKey}`;
   const detailsKey = `${REDIS_PREFIX.LEADERBOARD}details:${postId}:${dateKey}`;
 
-  // Get top players from sorted set (descending order of combined score)
-  // zRange options in Devvit: by default returns ascending. Reverse using index range isn't direct,
-  // so we fetch all (up to cap) and reverse in memory, or use negative indices if supported.
-  // To be safe, fetch all sorted elements up to MAX_LEADERBOARD_ENTRIES and sort in memory.
-  const players = await context.redis.zRange(scoresKey, 0, MAX_LEADERBOARD_ENTRIES - 1, { by: 'rank' });
+  // Get top players from sorted set (highest scores are at the end of the range)
+  const players = await context.redis.zRange(scoresKey, -MAX_LEADERBOARD_ENTRIES, -1, { by: 'rank' });
   if (players.length === 0) {
     return [];
   }
