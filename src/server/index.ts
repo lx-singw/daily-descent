@@ -6,7 +6,6 @@ import { validateAndDecodePath } from './pipeline/pathValidator.js';
 import { DungeonGenerator } from '../shared/DungeonGenerator.js';
 import { REDIS_PREFIX } from '../shared/constants.js';
 import { RunResult } from '../shared/types.js';
-import { seedDemoData } from '../../scripts/seed-demo-data.js';
 
 const app = express();
 app.use(express.json());
@@ -310,21 +309,6 @@ app.get('/api/markers', async (req, res) => {
     res.json({ markers });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch markers' });
-  }
-});
-
-// 7. POST /api/seed-demo - Populate daily seeds, ghosts, and stats with mock demo data
-app.post('/api/seed-demo', async (req, res) => {
-  try {
-    const postId = context.postId;
-    if (!postId) {
-      return res.status(400).json({ error: 'Missing postId' });
-    }
-
-    const success = await seedDemoData(redis, postId);
-    res.json({ success });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to seed demo data' });
   }
 });
 

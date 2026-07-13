@@ -26,45 +26,45 @@ export function compressPath(
 
   let currentX = startX;
   let currentY = startY;
-  
-  // We'll output move sequences, and insert a checkpoint every N moves or at the end
-  const CHECKPOINT_FREQUENCY = 10;
-  let moveAccumulator: { dir: string; count: number }[] = [];
-  
-  const pushMoveAccumulator = () => {
-    for (const move of moveAccumulator) {
-      parts.push(`${move.dir}${move.count}`);
-    }
-    moveAccumulator = [];
+  let activeDirection = '';
+  let activeCount = 0;
+  let previousStep: { x: number; y: number; t: number } | undefined;
+
+  const flushRun = () => {
+    if (!previousStep || activeCount === 0) return;
+    parts.push(`${activeDirection}${activeCount}`);
+    parts.push(`C,${previousStep.x},${previousStep.y},${previousStep.t}`);
+    activeCount = 0;
   };
 
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
+  for (const step of steps) {
     const dx = step.x - currentX;
     const dy = step.y - currentY;
-    
-    let dir = 'W';
-    if (dx === 1 && dy === 0) dir = 'R';
-    else if (dx === -1 && dy === 0) dir = 'L';
-    else if (dx === 0 && dy === 1) dir = 'D';
-    else if (dx === 0 && dy === -1) dir = 'U';
+    const direction = dx === 1 && dy === 0
+      ? 'R'
+      : dx === -1 && dy === 0
+        ? 'L'
+        : dx === 0 && dy === 1
+          ? 'D'
+          : dx === 0 && dy === -1
+            ? 'U'
+            : dx === 0 && dy === 0
+              ? 'W'
+              : '';
 
-    // RLE grouping
-    if (moveAccumulator.length > 0 && moveAccumulator[moveAccumulator.length - 1].dir === dir) {
-      moveAccumulator[moveAccumulator.length - 1].count++;
-    } else {
-      moveAccumulator.push({ dir, count: 1 });
+    if (!direction) {
+      throw new Error(`Cannot compress non-cardinal move from (${currentX}, ${currentY}) to (${step.x}, ${step.y})`);
     }
 
+    if (activeDirection && direction !== activeDirection) flushRun();
+    activeDirection = direction;
+    activeCount++;
     currentX = step.x;
     currentY = step.y;
-
-    // Periodically insert checkpoints to bound interpolation error
-    if ((i + 1) % CHECKPOINT_FREQUENCY === 0 || i === steps.length - 1) {
-      pushMoveAccumulator();
-      parts.push(`C,${currentX},${currentY},${step.t}`);
-    }
+    previousStep = step;
   }
+
+  flushRun();
 
   return parts.join(':');
 }
