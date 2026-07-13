@@ -1,4 +1,6 @@
-import { Devvit } from '@devvit/public-api';
+import { redis as webRedis } from '@devvit/web/server';
+
+type RedisClient = Pick<typeof webRedis, 'get' | 'set' | 'del'>;
 import { REDIS_PREFIX } from '../../shared/constants.js';
 
 /**
@@ -34,7 +36,7 @@ function generateDeterministicSeed(dateKey: string, postId: string): string {
  * Uses atomic Redis SETNX lock to prevent concurrent first-loads from generating competing seeds.
  */
 export async function getOrCreateDailySeed(
-  context: Devvit.Context,
+  client: RedisClient,
   postId: string,
   dateKey: string
 ): Promise<string> {
@@ -42,14 +44,14 @@ export async function getOrCreateDailySeed(
   const lockKey = `${REDIS_PREFIX.ROLLOVER_LOCK}${postId}:${dateKey}`;
 
   // 1. Attempt to read seed
-  let seed = await context.redis.get(seedKey);
+  let seed = await client.get(seedKey);
   if (seed) {
     return seed;
   }
 
   // 2. Try to acquire rollover generation lock
   // Lock expires in 10 seconds to prevent deadlocks if the generator crashes
-  const lockAcquired = await context.redis.set(lockKey, 'locked', {
+  const lockAcquired = await client.set(lockKey, 'locked', {
     nx: true,
     expiration: new Date(Date.now() + 10000)
   });
@@ -59,11 +61,11 @@ export async function getOrCreateDailySeed(
       // Generate seed deterministically
       seed = generateDeterministicSeed(dateKey, postId);
       // Store seed indefinitely (or for a long period like 30 days)
-      await context.redis.set(seedKey, seed);
+      await client.set(seedKey, seed);
       return seed;
     } finally {
       // Release lock
-      await context.redis.del([lockKey]);
+      await client.del(lockKey);
     }
   } else {
     // 3. Concurrency handling: Another request is currently generating the seed.
@@ -71,7 +73,7 @@ export async function getOrCreateDailySeed(
     let retries = 5;
     while (retries > 0) {
       await new Promise((resolve) => setTimeout(resolve, 200)); // sleep 200ms
-      seed = await context.redis.get(seedKey);
+      seed = await client.get(seedKey);
       if (seed) {
         return seed;
       }
@@ -90,14 +92,14 @@ export async function getOrCreateDailySeed(
  * allowing runs that started just before midnight to complete successfully.
  */
 export async function validateRunSeed(
-  context: Devvit.Context,
+  client: RedisClient,
   postId: string,
   submittedSeed: string,
   runTimestampMs: number
 ): Promise<boolean> {
   const runDate = new Date(runTimestampMs);
   const runDateKey = getUtcDateKey(runDate);
-  const expectedSeedToday = await getOrCreateDailySeed(context, postId, runDateKey);
+  const expectedSeedToday = await getOrCreateDailySeed(client, postId, runDateKey);
 
   if (submittedSeed === expectedSeedToday) {
     return true;
@@ -106,7 +108,7 @@ export async function validateRunSeed(
   // Check yesterday's seed
   const yesterday = new Date(runTimestampMs - 86400000);
   const yesterdayDateKey = getUtcDateKey(yesterday);
-  const expectedSeedYesterday = await getOrCreateDailySeed(context, postId, yesterdayDateKey);
+  const expectedSeedYesterday = await getOrCreateDailySeed(client, postId, yesterdayDateKey);
 
   return submittedSeed === expectedSeedYesterday;
 }

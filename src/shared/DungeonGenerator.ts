@@ -41,6 +41,7 @@ export class DungeonGenerator {
   public height = 60; // Total dungeon height in tiles
   public grid: number[][]; // 0 = floor/walkable, 1 = wall/blocked
   private rand: SeededRandom;
+  private startPosition = { x: 4, y: 4 };
 
   constructor(seed: string) {
     this.rand = new SeededRandom(seed);
@@ -80,6 +81,13 @@ export class DungeonGenerator {
           }
         }
       }
+    }
+
+    if (rooms.length > 0) {
+      this.startPosition = {
+        x: Math.floor(rooms[0].x + rooms[0].w / 2),
+        y: Math.floor(rooms[0].y + rooms[0].h / 2)
+      };
     }
 
     // 2. Connect rooms with simple L-shaped corridors
@@ -122,6 +130,6 @@ export class DungeonGenerator {
    * Gets a valid starting position (the center of the first generated room).
    */
   public getStartPosition(): { x: number; y: number } {
-    return { x: 4, y: 4 }; // Fallback starting anchor if generation fails
+    return { ...this.startPosition };
   }
 }

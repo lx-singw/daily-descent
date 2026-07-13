@@ -20,7 +20,7 @@ app.get('/api/seed', async (req, res) => {
     }
 
     const dateKey = getUtcDateKey();
-    const seed = await getOrCreateDailySeed(context, postId, dateKey);
+    const seed = await getOrCreateDailySeed(redis, postId, dateKey);
     
     // Check yesterday's collective goal progress
     const yesterday = new Date(Date.now() - 86400000);
@@ -77,7 +77,7 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 
     const dateKey = getUtcDateKey();
-    const leaderboard = await getDailyLeaderboard(context, postId, dateKey);
+    const leaderboard = await getDailyLeaderboard(redis, postId, dateKey);
     res.json({ leaderboard });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch leaderboard' });
@@ -93,7 +93,7 @@ app.get('/api/ghosts', async (req, res) => {
     }
 
     const dateKey = getUtcDateKey();
-    const ghosts = await getDailyGhostTrails(context, postId, dateKey);
+    const ghosts = await getDailyGhostTrails(redis, postId, dateKey);
     res.json({ ghosts });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch ghost trails' });
@@ -119,7 +119,7 @@ app.post('/api/run', async (req, res) => {
 
     // A. Validate seed validity (today or yesterday)
     const runTimestamp = timestamp || Date.now();
-    const isSeedValid = await validateRunSeed(context, postId, seed, runTimestamp);
+    const isSeedValid = await validateRunSeed(redis, postId, seed, runTimestamp);
     if (!isSeedValid) {
       return res.status(400).json({ error: 'Run submitted on expired or invalid seed.' });
     }
@@ -159,7 +159,7 @@ app.post('/api/run', async (req, res) => {
       seed
     };
 
-    await submitRun(context, postId, dateKey, run, pathResult.valid);
+    await submitRun(redis, postId, dateKey, run, pathResult.valid);
 
     // E. Save Epitaph Statistics
     if (deathCause) {
@@ -277,7 +277,7 @@ app.post('/api/marker', async (req, res) => {
       const overflowCount = totalMarkers - 50;
       const oldestMarkers = await redis.zRange(markerKey, 0, overflowCount - 1, { by: 'rank' });
       if (oldestMarkers.length > 0) {
-        await redis.zRem(markerKey, oldestMarkers);
+        await redis.zRem(markerKey, oldestMarkers.map((entry) => entry.member));
       }
     }
 
@@ -299,9 +299,9 @@ app.get('/api/markers', async (req, res) => {
     const markerKey = `${REDIS_PREFIX.TACTICAL_MARKERS}${postId}:${dateKey}`;
     
     const markersJson = await redis.zRange(markerKey, 0, -1, { by: 'rank' });
-    const markers = markersJson.map((str) => {
+    const markers = markersJson.map((entry) => {
       try {
-        return JSON.parse(str);
+        return JSON.parse(entry.member);
       } catch {
         return null;
       }
@@ -321,7 +321,7 @@ app.post('/api/seed-demo', async (req, res) => {
       return res.status(400).json({ error: 'Missing postId' });
     }
 
-    const success = await seedDemoData(context, postId);
+    const success = await seedDemoData(redis, postId);
     res.json({ success });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to seed demo data' });

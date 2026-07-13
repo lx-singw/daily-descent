@@ -6,29 +6,21 @@ class MockRedis {
   public store = new Map<string, string>();
   public setCalls = 0;
 
-  async get(key: string): Promise<string | null> {
-    return this.store.get(key) || null;
+  async get(key: string): Promise<string | undefined> {
+    return this.store.get(key);
   }
 
-  async set(key: string, value: string, options?: { nx?: boolean; expiration?: Date }): Promise<boolean> {
+  async set(key: string, value: string, options?: { nx?: boolean; expiration?: Date }): Promise<string> {
     this.setCalls++;
-    if (options?.nx) {
-      if (this.store.has(key)) {
-        return false;
-      }
+    if (options?.nx && this.store.has(key)) {
+      return '';
     }
     this.store.set(key, value);
-    return true;
+    return 'OK';
   }
 
-  async del(keys: string[]): Promise<number> {
-    let deleted = 0;
-    for (const key of keys) {
-      if (this.store.delete(key)) {
-        deleted++;
-      }
-    }
-    return deleted;
+  async del(key: string): Promise<void> {
+    this.store.delete(key);
   }
 }
 
@@ -41,7 +33,7 @@ describe('Lazy Seed Rotation & Rollover Locks', () => {
     } as unknown as Devvit.Context;
 
     const dateKey = '2026-07-13';
-    const seed = await getOrCreateDailySeed(mockContext, 't3_testpost', dateKey);
+    const seed = await getOrCreateDailySeed(mockRedis, 't3_testpost', dateKey);
 
     expect(seed).toBeDefined();
     expect(seed).toContain('2026-07-13');
@@ -57,11 +49,11 @@ describe('Lazy Seed Rotation & Rollover Locks', () => {
     } as unknown as Devvit.Context;
 
     const dateKey = '2026-07-13';
-    const firstSeed = await getOrCreateDailySeed(mockContext, 't3_testpost', dateKey);
+    const firstSeed = await getOrCreateDailySeed(mockRedis, 't3_testpost', dateKey);
     
     mockRedis.setCalls = 0; // reset counter
 
-    const secondSeed = await getOrCreateDailySeed(mockContext, 't3_testpost', dateKey);
+    const secondSeed = await getOrCreateDailySeed(mockRedis, 't3_testpost', dateKey);
     expect(secondSeed).toBe(firstSeed);
     expect(mockRedis.setCalls).toBe(0); // getOrCreateDailySeed should return early from first get() call
   });
@@ -78,18 +70,18 @@ describe('Lazy Seed Rotation & Rollover Locks', () => {
     const runTimestamp = new Date('2026-07-12T23:55:00Z').getTime();
     
     // Pre-warm the seeds
-    const seedJuly 12 = await getOrCreateDailySeed(mockContext, 't3_testpost', '2026-07-12');
-    const seedJuly 13 = await getOrCreateDailySeed(mockContext, 't3_testpost', '2026-07-13');
+    const seedJuly12 = await getOrCreateDailySeed(mockRedis, 't3_testpost', '2026-07-12');
+    const seedJuly13 = await getOrCreateDailySeed(mockRedis, 't3_testpost', '2026-07-13');
 
-    // Validation should succeed if we validate with the seed from July 12, even if it is currently July 13
-    const isValidYesterday = await validateRunSeed(mockContext, 't3_testpost', seedJuly 12, runTimestamp);
-    expect(isValidYesterday).toBe(true);
+    // A run is bound to its server-derived date; a future day's seed must not validate.
+    const isValidRunDay = await validateRunSeed(mockRedis, 't3_testpost', seedJuly12, runTimestamp);
+    expect(isValidRunDay).toBe(true);
 
-    const isValidToday = await validateRunSeed(mockContext, 't3_testpost', seedJuly 13, runTimestamp);
-    expect(isValidToday).toBe(true);
+    const isValidFutureDay = await validateRunSeed(mockRedis, 't3_testpost', seedJuly13, runTimestamp);
+    expect(isValidFutureDay).toBe(false);
 
     // Some random seed should be rejected
-    const isValidFake = await validateRunSeed(mockContext, 't3_testpost', 'seed_fake_123', runTimestamp);
+    const isValidFake = await validateRunSeed(mockRedis, 't3_testpost', 'seed_fake_123', runTimestamp);
     expect(isValidFake).toBe(false);
   });
 });

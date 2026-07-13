@@ -1,4 +1,6 @@
-import { Devvit } from '@devvit/public-api';
+import { redis as webRedis } from '@devvit/web/server';
+
+type RedisClient = Pick<typeof webRedis, 'zScore' | 'zAdd' | 'hSet' | 'zCard' | 'zRange' | 'zRem' | 'hGetAll'>;
 import { RunResult, LeaderboardEntry, DecodedGhostTrail } from '../../shared/types.js';
 import { REDIS_PREFIX, MAX_LEADERBOARD_ENTRIES, MAX_GHOST_TRAILS_PER_SEED } from '../../shared/constants.js';
 
@@ -17,7 +19,7 @@ function calculateCombinedScore(depth: number, durationMs: number): number {
  * Submits a validated run result to the daily leaderboard and ghost trail storage.
  */
 export async function submitRun(
-  context: Devvit.Context,
+  client: RedisClient,
   postId: string,
   dateKey: string,
   run: RunResult,
@@ -32,10 +34,10 @@ export async function submitRun(
 
   // 1. Save score to leaderboard sorted set
   // Check if player already has an entry
-  const existingScore = await context.redis.zScore(scoresKey, username);
+  const existingScore = await client.zScore(scoresKey, username);
   if (existingScore === undefined || score > existingScore) {
     // Save/update score
-    await context.redis.zAdd(scoresKey, { member: username, score });
+    await client.zAdd(scoresKey, { member: username, score });
 
     // Save details to hash
     const detailsEntry: LeaderboardEntry = {
@@ -45,7 +47,7 @@ export async function submitRun(
       timestamp: run.timestamp,
       verified
     };
-    await context.redis.hSet(detailsKey, {
+    await client.hSet(detailsKey, {
       [username]: JSON.stringify(detailsEntry)
     });
   }
@@ -58,19 +60,19 @@ export async function submitRun(
     timestamp: run.timestamp
   };
   
-  await context.redis.zAdd(ghostTrailsKey, {
+  await client.zAdd(ghostTrailsKey, {
     member: JSON.stringify(ghostEntry),
     score: run.timestamp
   });
 
   // Limit number of stored ghost trails to prevent unbounded memory growth
-  const totalTrails = await context.redis.zCard(ghostTrailsKey);
+  const totalTrails = await client.zCard(ghostTrailsKey);
   if (totalTrails > MAX_GHOST_TRAILS_PER_SEED) {
     // Fetch oldest trails (index 0 to overflow offset)
     const overflowCount = totalTrails - MAX_GHOST_TRAILS_PER_SEED;
-    const oldestTrails = await context.redis.zRange(ghostTrailsKey, 0, overflowCount - 1, { by: 'rank' });
+    const oldestTrails = await client.zRange(ghostTrailsKey, 0, overflowCount - 1, { by: 'rank' });
     if (oldestTrails.length > 0) {
-      await context.redis.zRem(ghostTrailsKey, oldestTrails);
+      await client.zRem(ghostTrailsKey, oldestTrails.map((entry) => entry.member));
     }
   }
 }
@@ -79,7 +81,7 @@ export async function submitRun(
  * Gets the sorted daily leaderboard for a given post and day.
  */
 export async function getDailyLeaderboard(
-  context: Devvit.Context,
+  client: RedisClient,
   postId: string,
   dateKey: string
 ): Promise<LeaderboardEntry[]> {
@@ -90,15 +92,16 @@ export async function getDailyLeaderboard(
   // zRange options in Devvit: by default returns ascending. Reverse using index range isn't direct,
   // so we fetch all (up to cap) and reverse in memory, or use negative indices if supported.
   // To be safe, fetch all sorted elements up to MAX_LEADERBOARD_ENTRIES and sort in memory.
-  const players = await context.redis.zRange(scoresKey, 0, MAX_LEADERBOARD_ENTRIES - 1, { by: 'rank' });
+  const players = await client.zRange(scoresKey, 0, MAX_LEADERBOARD_ENTRIES - 1, { by: 'rank' });
   if (players.length === 0) {
     return [];
   }
 
-  const detailsMap = await context.redis.hGetAll(detailsKey);
+  const detailsMap = await client.hGetAll(detailsKey);
   
   const entries: LeaderboardEntry[] = [];
-  for (const username of players) {
+  for (const player of players) {
+    const username = player.member;
     const detailsJson = detailsMap[username];
     if (detailsJson) {
       try {
@@ -122,19 +125,19 @@ export async function getDailyLeaderboard(
  * Gets recent ghost trails for a given seed/day.
  */
 export async function getDailyGhostTrails(
-  context: Devvit.Context,
+  client: RedisClient,
   postId: string,
   dateKey: string
 ): Promise<{ username: string; moveLog: string; deathCause?: string }[]> {
   const ghostTrailsKey = `${REDIS_PREFIX.GHOST_TRAILS}${postId}:${dateKey}`;
   
   // Get recent trails (ordered by timestamp ascending, so we take the end of the range)
-  const trailsJsonList = await context.redis.zRange(ghostTrailsKey, 0, -1, { by: 'rank' });
+  const trailsJsonList = await client.zRange(ghostTrailsKey, 0, -1, { by: 'rank' });
   
   const results: { username: string; moveLog: string; deathCause?: string }[] = [];
-  for (const jsonStr of trailsJsonList) {
+  for (const trail of trailsJsonList) {
     try {
-      const parsed = JSON.parse(jsonStr);
+      const parsed = JSON.parse(trail.member);
       results.push({
         username: parsed.username,
         moveLog: parsed.moveLog,
