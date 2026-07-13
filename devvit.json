@@ -1,11 +1,13 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
   "name": "daily-descent",
-  "version": "0.1.0",
   "post": {
-    "client": {
-      "dir": "dist/client",
-      "entry": "dist/client/index.html"
+    "dir": "dist/client",
+    "entrypoints": {
+      "default": {
+        "entry": "index.html",
+        "height": "tall"
+      }
     }
   },
   "server": {
