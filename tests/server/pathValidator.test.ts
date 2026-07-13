@@ -103,6 +103,33 @@ describe('Path Compressor and Validator', () => {
     expect(result.reason).toContain('Timing violation');
   });
 
+  test('rejects a mismatched server-issued start position', () => {
+    const log = compressPath(0, 0, 1000, [{ x: 1, y: 0, t: 200 }]);
+    const result = validateAndDecodePath(log, 'test_user', isTileWalkable, { x: 1, y: 0 }, 5000, { x: 4, y: 0 });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('Invalid starting position');
+  });
+
+  test('allows briefing time while keeping path duration authoritative', () => {
+    const log = compressPath(0, 0, 1000, [{ x: 1, y: 0, t: 200 }]);
+    const result = validateAndDecodePath(log, 'test_user', isTileWalkable, { x: 1, y: 0 }, 120_000, { x: 0, y: 0 });
+    expect(result.valid).toBe(true);
+    expect(result.decodedTrail?.steps.at(-1)?.t).toBe(200);
+  });
+
+  test('rejects trailing moves without a final checkpoint', () => {
+    const result = validateAndDecodePath('0,0,1000:R1', 'test_user', isTileWalkable);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('end with a checkpoint');
+  });
+
+  test('rejects non-integer and decreasing checkpoint timestamps', () => {
+    expect(validateAndDecodePath('0,0,1000:R1:C,1,0,200.5', 'test_user', isTileWalkable).valid).toBe(false);
+    const decreasing = validateAndDecodePath('0,0,1000:R1:C,1,0,200:R1:C,2,0,190', 'test_user', isTileWalkable);
+    expect(decreasing.valid).toBe(false);
+    expect(decreasing.reason).toContain('monotonic');
+  });
+
   test('should detect and reject terminal state mismatches', () => {
     const startX = 0;
     const startY = 0;

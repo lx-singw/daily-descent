@@ -1,6 +1,13 @@
+import { DEPTH_TILES_PER_LEVEL } from './constants.js';
+
 export interface Position {
   x: number;
   y: number;
+}
+
+export function deriveDepth(start: Position, end: Position): number {
+  const distance = Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
+  return Math.max(1, Math.floor(distance / DEPTH_TILES_PER_LEVEL) + 1);
 }
 
 export interface RunResult {
