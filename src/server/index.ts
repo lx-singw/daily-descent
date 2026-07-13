@@ -6,22 +6,9 @@ import { validateAndDecodePath } from './pipeline/pathValidator.js';
 import { DungeonGenerator } from '../shared/DungeonGenerator.js';
 import { REDIS_PREFIX, TTL_DAILY_KEYS_SEC, TTL_TACTICAL_MARKERS_SEC, TTL_RUN_TOKEN_SEC, PREDEFINED_DEATH_CAUSES } from '../shared/constants.js';
 import { RunResult } from '../shared/types.js';
-import { seedDemoData } from '../../scripts/seed-demo-data.js';
 
 const app = express();
 app.use(express.json());
-
-// Helper to check if current user is moderator
-async function isUserModerator(username: string, subredditName: string): Promise<boolean> {
-  if (!username || username === 'anonymous') return false;
-  try {
-    const moderators = await reddit.getModerators({ subredditName }).all();
-    return moderators.some((mod) => mod.username === username);
-  } catch (err) {
-    console.error('Error fetching moderators:', err);
-    return false;
-  }
-}
 
 // 1. GET /api/seed - Get today's seeded dungeon layout and issue a secure runToken
 app.get('/api/seed', async (req, res) => {
@@ -35,16 +22,15 @@ app.get('/api/seed', async (req, res) => {
     const username = currentUser ? currentUser.username : 'anonymous';
 
     const dateKey = getUtcDateKey();
-    const seed = await getOrCreateDailySeed(context, postId, dateKey);
+    const seed = await getOrCreateDailySeed(redis, postId, dateKey);
     await redis.expire(`${REDIS_PREFIX.SEED}${postId}:${dateKey}`, TTL_DAILY_KEYS_SEC);
 
     const generator = new DungeonGenerator(seed);
     const startPos = generator.getStartPosition();
 
-    // Issue a server-managed runToken (valid for 1 hour)
-    const runToken = `t_${Math.random().toString(36).substring(2, 10)}_${Date.now()}`;
+    // Issue a server-managed run token valid for one hour.
+    const runToken = `t_${crypto.randomUUID()}`;
     const tokenKey = `${REDIS_PREFIX.SEED}run_token:${postId}:${runToken}`;
-
     const tokenPayload = {
       seed,
       username,
@@ -53,7 +39,6 @@ app.get('/api/seed', async (req, res) => {
       startY: startPos.y
     };
 
-    // Store token in Redis with 1 hour expiration
     await redis.set(tokenKey, JSON.stringify(tokenPayload), {
       expiration: new Date(Date.now() + TTL_RUN_TOKEN_SEC * 1000)
     });
@@ -115,7 +100,7 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 
     const dateKey = getUtcDateKey();
-    const leaderboard = await getDailyLeaderboard(context, postId, dateKey);
+    const leaderboard = await getDailyLeaderboard(redis, postId, dateKey);
     res.json({ leaderboard });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch leaderboard' });
@@ -131,7 +116,7 @@ app.get('/api/ghosts', async (req, res) => {
     }
 
     const dateKey = getUtcDateKey();
-    const ghosts = await getDailyGhostTrails(context, postId, dateKey);
+    const ghosts = await getDailyGhostTrails(redis, postId, dateKey);
     res.json({ ghosts });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch ghost trails' });
@@ -155,7 +140,7 @@ app.post('/api/run', async (req, res) => {
       return res.status(400).json({ error: 'Invalid payload: missing runToken, seed or moveLog.' });
     }
 
-    // A. Validate and consume the runToken (Prevents double submits and timestamp spoofing)
+    // Validate the server-issued token to prevent replay and timestamp spoofing.
     const tokenKey = `${REDIS_PREFIX.SEED}run_token:${postId}:${runToken}`;
     const tokenDataStr = await redis.get(tokenKey);
     if (!tokenDataStr) {
@@ -172,7 +157,7 @@ app.post('/api/run', async (req, res) => {
     }
 
     // Consume token immediately
-    await redis.del([tokenKey]);
+    await redis.del(tokenKey);
 
     const dateKey = getUtcDateKey(new Date(tokenData.startTimestamp));
 
@@ -195,14 +180,14 @@ app.post('/api/run', async (req, res) => {
 
     // Validate coordinate boundaries and deathCause values
     if (deathCause && !PREDEFINED_DEATH_CAUSES.includes(deathCause)) {
-      if (username !== 'anonymous') await redis.del([playedCheckKey]); // refund played key
+      if (username !== 'anonymous') await redis.del(playedCheckKey); // refund played key
       return res.status(400).json({ error: 'invalid_death_cause', message: 'Death cause is not supported.' });
     }
 
     if (deathLocation) {
       const { x, y } = deathLocation;
       if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= 60 || y < 0 || y >= 60) {
-        if (username !== 'anonymous') await redis.del([playedCheckKey]);
+        if (username !== 'anonymous') await redis.del(playedCheckKey);
         return res.status(400).json({ error: 'invalid_death_location', message: 'Death coordinates out of bounds.' });
       }
     }
@@ -217,7 +202,7 @@ app.post('/api/run', async (req, res) => {
     );
 
     if (!pathResult.valid) {
-      if (username !== 'anonymous') await redis.del([playedCheckKey]);
+      if (username !== 'anonymous') await redis.del(playedCheckKey);
       return res.status(400).json({ error: 'validation_failed', reason: pathResult.reason });
     }
 
@@ -238,9 +223,9 @@ app.post('/api/run', async (req, res) => {
       seed
     };
 
-    // Anonymous players can play casual unranked runs but do not register in the database leaderboards
+    // Anonymous players can play casual runs but are excluded from ranked persistence.
     if (username !== 'anonymous') {
-      await submitRun(context, postId, dateKey, run, pathResult.valid);
+      await submitRun(redis, postId, dateKey, run, pathResult.valid);
 
       // E. Save Epitaph Statistics
       if (deathCause) {
@@ -369,7 +354,7 @@ app.post('/api/marker', async (req, res) => {
       const overflowCount = totalMarkers - 50;
       const oldestMarkers = await redis.zRange(markerKey, 0, overflowCount - 1, { by: 'rank' });
       if (oldestMarkers.length > 0) {
-        await redis.zRem(markerKey, oldestMarkers);
+        await redis.zRem(markerKey, oldestMarkers.map((entry) => entry.member));
       }
     }
 
@@ -391,9 +376,9 @@ app.get('/api/markers', async (req, res) => {
     const markerKey = `${REDIS_PREFIX.TACTICAL_MARKERS}${postId}:${dateKey}`;
     
     const markersJson = await redis.zRange(markerKey, 0, -1, { by: 'rank' });
-    const markers = markersJson.map((str) => {
+    const markers = markersJson.map((entry) => {
       try {
-        return JSON.parse(str);
+        return JSON.parse(entry.member);
       } catch {
         return null;
       }
@@ -405,32 +390,6 @@ app.get('/api/markers', async (req, res) => {
   }
 });
 
-// 7. POST /api/seed-demo - Populate daily seeds, ghosts, and stats with mock demo data (Moderators/Dev only)
-app.post('/api/seed-demo', async (req, res) => {
-  try {
-    const postId = context.postId;
-    const subredditName = context.subredditName || '';
-    if (!postId) {
-      return res.status(400).json({ error: 'Missing postId' });
-    }
-
-    const currentUser = await reddit.getCurrentUser();
-    const username = currentUser ? currentUser.username : 'anonymous';
-
-    // Guard: Only allow if local development environment OR if caller is a subreddit moderator
-    const isLocalDev = process.env.NODE_ENV === 'development';
-    const isModerator = await isUserModerator(username, subredditName);
-
-    if (!isLocalDev && !isModerator) {
-      return res.status(403).json({ error: 'forbidden', message: 'You are not authorized to seed demo data in production.' });
-    }
-
-    const success = await seedDemoData(context, postId);
-    res.json({ success });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to seed demo data' });
-  }
-});
 
 const server = createServer(app);
 server.on('error', (err) => console.error(`Server error: ${err.stack}`));

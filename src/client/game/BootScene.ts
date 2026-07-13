@@ -8,7 +8,7 @@ export class BootScene extends Phaser.Scene {
   preload() {
     // Renders basic color blocks as textures so the game is visual without external assets
     const makeColorBlock = (key: string, color: number) => {
-      const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+      const graphics = this.make.graphics({ x: 0, y: 0 });
       graphics.fillStyle(color, 1);
       graphics.fillRect(0, 0, 32, 32);
       graphics.generateTexture(key, 32, 32);

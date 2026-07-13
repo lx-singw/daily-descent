@@ -1,16 +1,20 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
 
 export default defineConfig({
-  root: resolve(__dirname, 'src/client'),
+  root: resolve(import.meta.dirname, 'src/client'),
+  base: './',
   build: {
-    outDir: resolve(__dirname, 'dist/client'),
+    outDir: resolve(import.meta.dirname, 'dist/client'),
     emptyOutDir: true,
-    rollupOptions: {
-      input: resolve(__dirname, 'src/client/index.html'),
-    },
+    target: 'es2022',
+    sourcemap: false,
   },
   server: {
-    port: 3000,
+    host: '0.0.0.0',
+    port: 5173,
+    proxy: {
+      '/api': 'http://localhost:3000',
+    },
   },
 });

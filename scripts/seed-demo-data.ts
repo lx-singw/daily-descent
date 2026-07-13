@@ -1,4 +1,6 @@
-import { Devvit } from '@devvit/public-api';
+import { redis as webRedis } from '@devvit/web/server';
+
+type RedisClient = Pick<typeof webRedis, 'set' | 'zAdd' | 'hSet'>;
 import { REDIS_PREFIX } from '../src/shared/constants.js';
 import { getUtcDateKey } from '../src/server/generation/seedRotation.js';
 import { LeaderboardEntry } from '../src/shared/types.js';
@@ -7,7 +9,7 @@ import { LeaderboardEntry } from '../src/shared/types.js';
  * Seeds mock data for today and yesterday to populate leaderboards,
  * ghost trails, tactical warning markers, epitaph stats, and collective goals.
  */
-export async function seedDemoData(context: Devvit.Context, postId: string): Promise<boolean> {
+export async function seedDemoData(client: RedisClient, postId: string): Promise<boolean> {
   try {
     const dateKey = getUtcDateKey();
     
@@ -17,11 +19,11 @@ export async function seedDemoData(context: Devvit.Context, postId: string): Pro
 
     // 1. Seed yesterday's collective goal progress to 30 (Goal met)
     const yesterdayGoalKey = `${REDIS_PREFIX.COLLECTIVE_GOAL}${postId}:${yesterdayKey}`;
-    await context.redis.set(yesterdayGoalKey, '30');
+    await client.set(yesterdayGoalKey, '30');
 
     // 2. Seed today's collective goal progress to 12
     const todayGoalKey = `${REDIS_PREFIX.COLLECTIVE_GOAL}${postId}:${dateKey}`;
-    await context.redis.set(todayGoalKey, '12');
+    await client.set(todayGoalKey, '12');
 
     // 3. Seed today's leaderboard scores and details
     const scoresKey = `${REDIS_PREFIX.LEADERBOARD}scores:${postId}:${dateKey}`;
@@ -38,7 +40,7 @@ export async function seedDemoData(context: Devvit.Context, postId: string): Pro
     const BASE_FACTOR = 1_000_000_000;
     for (const player of mockPlayers) {
       const score = player.depth * BASE_FACTOR + (BASE_FACTOR - player.duration);
-      await context.redis.zAdd(scoresKey, { member: player.username, score });
+      await client.zAdd(scoresKey, { member: player.username, score });
 
       const detailsEntry: LeaderboardEntry = {
         username: player.username,
@@ -47,7 +49,7 @@ export async function seedDemoData(context: Devvit.Context, postId: string): Pro
         timestamp: Date.now() - player.duration,
         verified: true
       };
-      await context.redis.hSet(detailsKey, {
+      await client.hSet(detailsKey, {
         [player.username]: JSON.stringify(detailsEntry)
       });
     }
@@ -61,7 +63,7 @@ export async function seedDemoData(context: Devvit.Context, postId: string): Pro
       depth: 8,
       duration: 120000
     };
-    await context.redis.set(leaderEndpointKey, JSON.stringify(leaderData));
+    await client.set(leaderEndpointKey, JSON.stringify(leaderData));
 
     // 5. Seed today's ghost trails
     const ghostTrailsKey = `${REDIS_PREFIX.GHOST_TRAILS}${postId}:${dateKey}`;
@@ -95,7 +97,7 @@ export async function seedDemoData(context: Devvit.Context, postId: string): Pro
         deathCause: trail.deathCause,
         timestamp: trail.timestamp
       };
-      await context.redis.zAdd(ghostTrailsKey, {
+      await client.zAdd(ghostTrailsKey, {
         member: JSON.stringify(ghostEntry),
         score: trail.timestamp
       });
@@ -111,7 +113,7 @@ export async function seedDemoData(context: Devvit.Context, postId: string): Pro
     ];
 
     for (const marker of mockMarkers) {
-      await context.redis.zAdd(markerKey, {
+      await client.zAdd(markerKey, {
         member: JSON.stringify(marker),
         score: marker.timestamp
       });
@@ -119,7 +121,7 @@ export async function seedDemoData(context: Devvit.Context, postId: string): Pro
 
     // 7. Seed today's Epitaph Statistics
     const epitaphKey = `${REDIS_PREFIX.EPITAPH_STATS}${postId}:${dateKey}`;
-    await context.redis.hSet(epitaphKey, {
+    await client.hSet(epitaphKey, {
       'Greed': '12',
       'Spike Trap': '8',
       'Guard Corner': '5'

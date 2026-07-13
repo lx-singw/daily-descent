@@ -26,42 +26,45 @@ export function compressPath(
 
   let currentX = startX;
   let currentY = startY;
-  let lastDir = '';
-  let count = 0;
+  let activeDirection = '';
+  let activeCount = 0;
+  let previousStep: { x: number; y: number; t: number } | undefined;
 
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
+  const flushRun = () => {
+    if (!previousStep || activeCount === 0) return;
+    parts.push(`${activeDirection}${activeCount}`);
+    parts.push(`C,${previousStep.x},${previousStep.y},${previousStep.t}`);
+    activeCount = 0;
+  };
+
+  for (const step of steps) {
     const dx = step.x - currentX;
     const dy = step.y - currentY;
+    const direction = dx === 1 && dy === 0
+      ? 'R'
+      : dx === -1 && dy === 0
+        ? 'L'
+        : dx === 0 && dy === 1
+          ? 'D'
+          : dx === 0 && dy === -1
+            ? 'U'
+            : dx === 0 && dy === 0
+              ? 'W'
+              : '';
 
-    let dir = 'W';
-    if (dx === 1 && dy === 0) dir = 'R';
-    else if (dx === -1 && dy === 0) dir = 'L';
-    else if (dx === 0 && dy === 1) dir = 'D';
-    else if (dx === 0 && dy === -1) dir = 'U';
-
-    if (i === 0) {
-      lastDir = dir;
-      count = 1;
-    } else if (dir === lastDir) {
-      count++;
-    } else {
-      // Direction changed! Push the accumulated move segment and a checkpoint
-      parts.push(`${lastDir}${count}`);
-      parts.push(`C,${currentX},${currentY},${steps[i - 1].t}`);
-      lastDir = dir;
-      count = 1;
+    if (!direction) {
+      throw new Error(`Cannot compress non-cardinal move from (${currentX}, ${currentY}) to (${step.x}, ${step.y})`);
     }
 
+    if (activeDirection && direction !== activeDirection) flushRun();
+    activeDirection = direction;
+    activeCount++;
     currentX = step.x;
     currentY = step.y;
+    previousStep = step;
   }
 
-  // Push the final segment and final checkpoint
-  if (count > 0) {
-    parts.push(`${lastDir}${count}`);
-    parts.push(`C,${currentX},${currentY},${steps[steps.length - 1].t}`);
-  }
+  flushRun();
 
   return parts.join(':');
 }

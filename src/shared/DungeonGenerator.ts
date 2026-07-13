@@ -83,22 +83,12 @@ export class DungeonGenerator {
       }
     }
 
-    // Determine a dynamic, valid start position (center of first room)
+    // Determine a dynamic, valid start position (center of first room).
     if (rooms.length > 0) {
       this.startPosition = {
         x: Math.floor(rooms[0].x + rooms[0].w / 2),
         y: Math.floor(rooms[0].y + rooms[0].h / 2)
       };
-    } else {
-      // Fallback: search grid for any carved floor
-      outerLoop: for (let y = 0; y < this.height; y++) {
-        for (let x = 0; x < this.width; x++) {
-          if (this.grid[y][x] === 0) {
-            this.startPosition = { x, y };
-            break outerLoop;
-          }
-        }
-      }
     }
 
     // 2. Connect rooms with simple L-shaped corridors
@@ -141,6 +131,6 @@ export class DungeonGenerator {
    * Gets a valid starting position (the center of the first generated room).
    */
   public getStartPosition(): { x: number; y: number } {
-    return this.startPosition;
+    return { ...this.startPosition };
   }
 }
