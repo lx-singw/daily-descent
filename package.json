@@ -1,0 +1,21 @@
+{
+  "name": "daily-descent",
+  "version": "0.1.0",
+  "description": "The Daily Descent - A Reddit-native daily rogue-lite dungeon crawler",
+  "main": "src/server/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "devvit playtest",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@devvit/public-api": "^0.11.0",
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vitest": "^1.3.1"
+  }
+}

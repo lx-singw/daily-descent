@@ -1,0 +1,55 @@
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export interface RunResult {
+  username: string;
+  depth: number;
+  duration: number; // Duration of run in milliseconds
+  deathLocation?: Position;
+  deathCause?: string;
+  moveLog: string; // Delta-compressed directional move log
+  timestamp: number; // UTC timestamp of run completion
+  seed: string; // The seed this run was played on
+}
+
+export interface DecodedGhostStep {
+  x: number;
+  y: number;
+  t: number; // Milliseconds offset from run start
+}
+
+export interface DecodedGhostTrail {
+  username: string;
+  steps: DecodedGhostStep[];
+  deathCause?: string;
+}
+
+export interface LeaderboardEntry {
+  username: string;
+  depth: number;
+  duration: number; // ms
+  timestamp: number; // ms
+  verified: boolean; // anti-cheat verification status
+}
+
+export interface SpiritMessage {
+  id: string;
+  author: string;
+  commentId?: string; // Reddit comment ID if posted to Reddit
+  x: number;
+  y: number;
+  message: string;
+  votes: number;
+  timestamp: number;
+}
+
+export interface Card {
+  id: string;
+  name: string;
+  effect: 'heal' | 'damage_bonus' | 'speed_bonus';
+  value: number;
+  creator?: string;
+  votes?: number;
+}
