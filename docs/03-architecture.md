@@ -30,11 +30,14 @@ Devvit Web lets the game be built as a standard web app (Phaser + whatever frame
 - **Compression Scheme:** The client compresses the player's movements into a run-length encoded direction log (e.g., `U5R2D1W3` indicating Up, Right, Down, Wait counts) paired with absolute tile coordinates and timestamp checkpoints every 10 steps to bound interpolation drift (format: `startX,startY,startTimeMs:U5:C,12,9,1200`).
 - **Caps & TTL:** Redis storage enforces strict caps: a maximum of 15 ghost trails per seed key, a maximum move log size of 12KB (or 1000 moves), and a Time-To-Live (TTL) of 7 days on historical keys to maintain memory limits.
 
-### Spirit messages
-- On death, client shows a prompt: "Leave a warning for the next Redditor?" with a short text field (pre-filled with a suggestion based on cause of death, fully editable).
-- If the player opts in, the backend posts this as an actual Reddit comment on the post (via Devvit's Reddit API access) AND stores it tagged with the in-game death location so it can be rendered as an in-game icon at that spot.
-- Separately, the backend periodically (or on load) pulls the post's top-level comments via the Reddit API and surfaces a handful as ambient spirit messages even if they weren't generated through the death flow — this is what makes the dungeon feel populated by real community text from the start of the day, not just after a few deaths.
-- **Validate early:** confirm the scope/permissions Devvit grants for posting comments programmatically on a player's behalf, since this needs explicit player consent and correct attribution.
+### Tactical warning markers [Hackathon Critical]
+- On death, client prompts the player to select a tactical warning marker (predefined options: *"Trap!"*, *"Dead end"*, *"Heal here"*, *"Boss route"*, or *"I regret everything"*).
+- The selected marker ID is stored alongside coordinates `(x, y)` in today's Redis set for the persistent post.
+- If the player opts in, an explicit manual User Action (`runAs: 'USER'`) triggers the Devvit backend to post a formatted comment credit to the player's account. Otherwise, the marker is stored locally in Redis and rendered inside subsequent players' runs.
+
+### Collective Community Goal [Hackathon Critical]
+- The backend stores daily progression indices in Redis (e.g. tracking how many players reach Room 5 today).
+- If the daily goal target is achieved (e.g., >= 25 runs reach Room 5), the lazy rollover process for tomorrow's seed applies a starting loadout modifier (e.g. starting with an extra torch or additional +2 HP) dynamically.
 
 ### Draft pool / comment-derived cards (Tier 2, if time allows)
 - Backend job runs once daily (tied to the seed rotation): fetch top-upvoted comments from *yesterday's* post, run them through a strict regex/format matcher for the `[Card] Name: Effect` pattern.
