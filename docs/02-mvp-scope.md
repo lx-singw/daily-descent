@@ -67,7 +67,7 @@ These reuse data/systems you already have from Tier 0–3 — none require new i
 - Mobile-specific input schemes beyond making sure touch targets and viewport scaling work (this is a polish requirement, not a separate feature — verify early, don't treat as a stretch goal).
 
 ## Note on scope
-This document covers the **hackathon MVP only**. For the longer-term vision beyond the hackathon deadline — features intentionally out of scope here because they need more runway, infrastructure, or community scale than a hackathon window allows — see `05-future-vision.md`. Nothing in this doc should be read as "the whole plan"; it's the first slice of a bigger build.
+This document covers the **hackathon MVP only**. For the longer-term vision beyond the hackathon deadline — features intentionally out of scope here because they need more runway, infrastructure, or community scale than a hackathon window allows — see [05-post-mvp-platform-vision.md](file:///z:/home/lx_singw/projects/daily-descent/docs/05-post-mvp-platform-vision.md). Nothing in this doc should be read as "the whole plan"; it's the first slice of a bigger build.
 
 ## Suggested build order across a multi-day window
 

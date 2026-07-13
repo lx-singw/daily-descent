@@ -4,7 +4,7 @@ This is a concrete directory layout for implementation, structured around Devvit
 
 ```
 daily-descent/
-├── devvit.yaml                          # Devvit app manifest/config
+├── devvit.json                          # Devvit app manifest/config
 ├── package.json
 ├── tsconfig.json
 ├── README.md
@@ -90,10 +90,11 @@ daily-descent/
 │   │       └── DungeonGenerator.test.ts # Determinism tests: same seed → same layout
 │   ├── server/
 │   │   ├── pipeline/
-│   │   │   ├── whitelistParser.test.ts  # Format validation, whitelist enforcement
-│   │   │   └── moderationGate.test.ts   # Mocked Gemini responses, edge cases
+│   │   │   ├── pathValidator.test.ts    # Abuse prevention, timing limits, collisions
+│   │   │   ├── whitelistParser.test.ts  # Format validation, whitelist enforcement (Tier 2)
+│   │   │   └── moderationGate.test.ts   # Mocked Gemini responses, edge cases (Tier 4)
 │   │   └── routes/
-│   │       └── seed.test.ts             # Day-rollover logic
+│   │       └── seedRotation.test.ts     # Rollover lock races, rollover overlap validation
 │   └── fixtures/
 │       └── sampleComments.json          # Test data for parser/moderation tests
 │
@@ -126,9 +127,9 @@ daily-descent/
 
 - **Platform/hosting:** Devvit Web — required by the hackathon, runs client and server on Reddit's infrastructure. No external hosting in the MVP.
 - **Rendering:** Phaser (TypeScript).
-- **Storage (MVP):** Devvit's built-in key-value storage APIs.
-- **Reddit integration:** Devvit's Reddit API access (comments, flair).
-- **Moderation gate (Tier 4 only):** Gemini via Google AI Studio / Vertex AI (existing Google Ultra plan) — a small structured classification call, paired with (never replacing) the hard whitelist parser.
+- **Storage (MVP):** Devvit Redis.
+- **Reddit integration:** Devvit's Reddit API access (comments, flair, User Actions).
+- **Moderation gate (Tier 4 only):** Gemini via Google AI Studio / Vertex AI (existing Google Ultra plan) — a small structured classification call, paired with (never replacing) the hard whitelist parser. Outbound domains must be configured in `devvit.json`.
 - **Post-MVP analytics infra (Phase 3–4, speculative):** AWS (existing credits) — only if Devvit's storage proves insufficient once real usage data exists to analyze. Not part of MVP scope; see `07-roadmap.md`.
 - **Post-MVP personalization compute (Phase 5, speculative):** AWS Lambda or equivalent (existing credits) — only if per-player tendency modeling outgrows Devvit's backend. Not part of MVP scope.
 

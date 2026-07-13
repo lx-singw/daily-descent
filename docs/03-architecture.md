@@ -21,15 +21,14 @@ Devvit Web lets the game be built as a standard web app (Phaser + whatever frame
 
 ## Core data flow, by feature
 
-### Daily seed generation
-- Server-side: a scheduled Devvit job (or a check-on-first-load-of-the-day pattern if scheduled jobs aren't available/reliable) generates a new seed once per 24h window and stores it (post-associated key-value store).
-- Client requests "today's seed" on load; dungeon generation algorithm runs **client-side** using that seed (deterministic PRNG) so you don't need to transmit the whole layout — just the seed and generation parameters.
-- **Validate early:** confirm Devvit's storage APIs support simple per-post key-value persistence with the read/write patterns you need before designing anything more complex on top of it.
+### Daily seed generation (UTC Midnight Lazy-Rollover)
+- **Persistent Post Model:** The game runs inside a single, persistent pinned post on the subreddit. All daily seeds, leaderboards, and trails are partitioned by day keys in the post's Redis storage namespace.
+- **Lazy Rollover with Locks:** Seed rotation is lazy-loaded (triggered on the first `/api/seed` fetch of the day). To prevent competing seeds on simultaneous first-loads, the backend uses an atomic Redis lock (`SETNX` or transactional multi/exec) on the current date key (`daily_seed:postId:YYYY-MM-DD`). 
+- **Rollover Overlaps:** Runs that cross midnight are validated against the seed corresponding to their run start timestamp rather than the current server time, ensuring that longer runs are not invalidated.
 
-### Ghost replays
-- Client records its own run as a lightweight array of `{t: timestamp, x, y}` samples (sample every ~250-500ms, not every frame — keep payload small).
-- On death or completion, client sends this trail + outcome to the backend, which stores it (with a cap — keep only the most recent N runs per seed, or a representative sample, to avoid unbounded storage growth).
-- On load, client fetches N recent trails for today's seed and renders them as replay sprites, interpolating between sampled points.
+### Ghost replays (RLE Directional Compression)
+- **Compression Scheme:** The client compresses the player's movements into a run-length encoded direction log (e.g., `U5R2D1W3` indicating Up, Right, Down, Wait counts) paired with absolute tile coordinates and timestamp checkpoints every 10 steps to bound interpolation drift (format: `startX,startY,startTimeMs:U5:C,12,9,1200`).
+- **Caps & TTL:** Redis storage enforces strict caps: a maximum of 15 ghost trails per seed key, a maximum move log size of 12KB (or 1000 moves), and a Time-To-Live (TTL) of 7 days on historical keys to maintain memory limits.
 
 ### Spirit messages
 - On death, client shows a prompt: "Leave a warning for the next Redditor?" with a short text field (pre-filled with a suggestion based on cause of death, fully editable).
@@ -48,10 +47,10 @@ Devvit Web lets the game be built as a standard web app (Phaser + whatever frame
 - The whitelist parser remains the hard technical backstop regardless of what Gemini decides — this call never replaces it, only adds a second, fuzzier opinion on top.
 - **Validate early (see doc 04, item 6):** confirm Devvit's backend environment permits outbound calls to an external API (Gemini) at all, and within what latency/timeout constraints a scheduled/triggered job can tolerate, before designing the daily card-processing job around this dependency.
 
-### Leaderboard
-- Backend stores `{username, depth, time, timestamp}` per completed run, keyed to today's seed.
-- Client fetches top N sorted by depth (tiebreak: time) for display.
-- Reset/rotate this store on each new seed generation — don't let it grow unbounded across days.
+### Leaderboard Trust & Verification Model
+- **Trust Model:** The leaderboard is designed for friendly, unverified competition. We do not claim cryptographic anti-cheat.
+- **Abuse Prevention:** The backend reconstructs steps from the RLE log and validates coordinate bounds, legal tile transitions (no wall-walking), minimum speed/timing thresholds (`180ms` between moves), and checks that the final position matches the reported status.
+- **Rate Limits & Idempotency:** Users are limited to **one ranked run submission per day** (saved as a played flag key in Redis). Duplicate submissions are rejected, and payload validation ensures fields are well-formed before write.
 
 ## Phaser-specific notes
 - Grid-based dungeon: a tilemap-driven scene is the simplest reliable approach — use Phaser's tilemap support rather than hand-placing sprites per room.
@@ -65,7 +64,7 @@ Devvit Web lets the game be built as a standard web app (Phaser + whatever frame
 | Platform / hosting | Devvit Web | Required by the hackathon; runs both client and server on Reddit's infrastructure — no external hosting needed for the MVP |
 | Rendering | Phaser (TypeScript) | Required framing for the Best Use of Phaser sub-award; well-suited to tilemap-based dungeon generation |
 | Language | TypeScript | Client, server, and shared types, per `08-repo-structure.md` |
-| Storage (MVP) | Devvit's built-in key-value storage | Runs/leaderboard/ghost trails/card pool; limits unconfirmed — see doc 04, item 7 |
+| Storage (MVP) | Devvit Redis | Scoped per post using day keys; limits details verified — see doc 04, item 7 |
 | Reddit integration | Devvit's Reddit API access | Comment read/write, flair-setting; permission scope unconfirmed — see doc 04, items 2–3, 5 |
 | Moderation gate (Tier 4 only) | Gemini via Google AI Studio / Vertex AI (Google Ultra plan) | Structured classification only, paired with — never replacing — the hard whitelist parser |
 | Post-MVP analytics infra (Phase 3–4, speculative) | AWS (existing credits) | Only if Devvit's storage proves insufficient for richer usage-metric tracking once real data exists — not part of MVP scope |

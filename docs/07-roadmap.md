@@ -21,8 +21,9 @@ This roadmap spans three horizons: the hackathon build itself, the immediate pos
 
 - **Tier 0** (core dungeon, movement, death loop, leaderboard, daily reset) — the non-negotiable floor.
 - **Tier 1** (spirit messages, ghost replays, ambient comment surfacing) — the Reddit-native layer.
-- **Tier 3** (death cause tagging, community stat summary, spirit message voting, flair milestones, weekly meta-layer) — cheap reinforcement, prioritized ahead of Tier 2 per doc 02's build order.
-- **Tier 2** (comment-derived draft cards) — only if time allows after Tiers 0/1/3 are solid.
+- **Tier 3** (death cause tagging, community stat summary, spirit message voting, flair milestones, weekly meta-layer) — cheap reinforcement, prioritized ahead of Tier 2.
+- **Tier 3.5** (heatmap, last survivor silhouette, named runs, weekday modifier, community goals) — cheap identity & rhythm deepeners, built after Tier 3, before Tier 2.
+- **Tier 2** (comment-derived draft cards) — only if time allows after Tiers 0/1/3/3.5 are solid.
 - **Tier 4** (LLM moderation gate) — only if Tier 2 shipped and is stable.
 - Polish pass: mobile viewport correctness, onboarding beat, demo post seeded with planted ghosts/messages/cards (doc 04's submission-prep notes).
 

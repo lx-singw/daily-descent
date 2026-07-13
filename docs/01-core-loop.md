@@ -7,28 +7,28 @@ A daily rogue-lite dungeon crawl where everyone in the subreddit plays the exact
 
 ## The loop, end to end
 
-1. **Midnight (server time): new seed drops.**
-   A new dungeon layout generates from a fixed daily seed. Every player who opens the post today plays the *same* layout, with the *same* card draft pool.
+1. **Midnight (UTC): seed rotation.**
+   The game operates inside a single, persistent pinned post on the subreddit. At midnight UTC, the seed rotates. The client-side generator uses the new seed to render today's dungeon. All leaderboard, ghost trail, and draft pool data are day-keyed in the persistent post's storage.
 
 2. **Player opens the post.**
    They see:
-   - The dungeon, generated fresh for today.
-   - Ghost trails of a handful of recent runs (semi-transparent replays showing where past players moved, and where they died).
-   - "Spirit messages" — short warnings pulled from top comments on today's post, anchored to the room/location the commenter died in or wants to warn about.
+   - The dungeon, generated dynamically for today's seed.
+   - Ghost trails of a handful of recent runs today (semi-transparent replays showing where past players moved and died).
+   - "Spirit messages" — short warnings pulled from top comments on the post, anchored to the room/location the commenter died in or wants to warn about.
 
-3. **Player picks a starting loadout** from today's draft pool (3–5 cards). The draft pool is populated partly from a fixed base set and partly from yesterday's top-upvoted community-submitted cards (see User Contribution below).
+3. **Player picks a starting loadout** from today's draft pool (3–5 cards). The draft pool is populated partly from a fixed base set and partly from yesterday's top-upvoted community-submitted comments (see User Contribution below).
 
 4. **Player descends.**
-   Turn-based or real-time-lite movement through procedurally generated rooms (grid-based, Phaser-rendered). Standard rogue-lite tension: limited resources, permadeath for the run, score based on depth reached + loot collected.
+   Grid-based movement through procedurally generated rooms (Phaser-rendered). Standard rogue-lite tension: limited resources, permadeath for the run, score based on depth reached + time elapsed.
 
 5. **Player dies or reaches the bottom.**
-   - On death: they can drop a Spirit Message (a short text warning, pulled from their own comment on the post, or a quick in-game prompt) at the location they died, visible to future players today.
-   - On success: their time/depth is submitted to today's leaderboard.
+   - On death: they can leave a Spirit Message (posted as a Reddit comment and anchored visually at their death location) for future players today.
+   - On success: their time/depth is submitted to today's daily leaderboard.
 
 6. **Player leaves a comment (optional but incentivized).**
-   Top-upvoted comments that read as a trap/card suggestion in a light format (e.g. `[Card] Vampire Fangs: heal 2 HP on hit`) become eligible for tomorrow's draft pool, pending a lightweight validation pass (see Guardrails).
+   Top-upvoted comments that read as a trap/card suggestion in a light format (e.g. `[Card] Vampire Fangs: heal 2 HP on hit`) become eligible for tomorrow's draft pool, filtered by comment timestamp.
 
-7. **Next midnight: repeat**, with a new seed and a refreshed draft pool shaped by yesterday's top comments.
+7. **Next midnight UTC: repeat**, with a new day key, fresh seed, and a refreshed draft pool shaped by yesterday's comments on the persistent post.
 
 ## Why this loop hits the judging criteria directly
 

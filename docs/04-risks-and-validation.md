@@ -12,7 +12,7 @@ This is the list of things to test against the *real* Devvit platform before you
 
 ## 3. Can your app post a comment on behalf of a consenting player?
 **Why it matters:** gates the "leave a spirit message" flow, which is one of your two clearest Reddit-y differentiators.
-**How to test:** verify the permission model — does this require the player to explicitly authorize, does it post as the player or as the app/bot, and what's the UX for that consent moment.
+**How to test:** verify the permission model for `runAs: 'USER'` comment posting. Since user actions require app approval and are restricted in playtesting, build a fallback: store and display the message in-game (locally in Redis) and show an optional but explicit manual "Post as u/username" trigger action button showing the exact text to be submitted.
 
 ## 4. Can you run a scheduled/timed job (e.g., for daily seed rotation), or do you need a "check on load" pattern instead?
 **Why it matters:** determines whether "midnight rollover" is a clean server-side event or something you simulate by checking timestamps whenever a user loads the post.
@@ -24,7 +24,7 @@ This is the list of things to test against the *real* Devvit platform before you
 
 ## 6. If using the Gemini moderation gate (Tier 4), what's the latency/cost of a call in the daily card-processing job?
 **Why it matters:** Tier 4's card quality-gate runs once daily against a batch of comments — confirm this fits comfortably within whatever job-execution constraints Devvit's scheduled/triggered jobs impose (time limits, external API call allowances) before designing around it.
-**How to test:** prototype a single Gemini API call (via Google AI Studio / Vertex AI, using the existing Google Ultra plan) against a sample comment batch outside of Devvit first, then confirm Devvit's backend environment can make outbound API calls at all, and within what constraints.
+**How to test:** prototype a single Gemini API call (via Google AI Studio / Vertex AI, using the existing Google Ultra plan) against a sample comment batch outside of Devvit first, then confirm Devvit's backend environment can make outbound API calls at all, and within what constraints. Note that outbound domains (like `generativelanguage.googleapis.com`) must be explicitly declared in `devvit.json` under `permissions.http.domains`.
 
 ## 7. What are the actual size/rate limits on Devvit's storage?
 **Why it matters:** ghost replay trails and leaderboard entries both grow over time; you need to know if you're storing megabytes or kilobytes comfortably, and how often you can write.
