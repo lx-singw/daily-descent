@@ -18,9 +18,28 @@ export const REDIS_PREFIX = {
   LEADERBOARD: 'leaderboard:',
   GHOST_TRAILS: 'ghost_trails:',
   ROLLOVER_LOCK: 'rollover_lock:',
-  SPIRIT_MESSAGES: 'spirit_messages:',
-  CARDS_POOL: 'cards_pool:'
+  TACTICAL_MARKERS: 'tactical_markers:',
+  EPITAPH_STATS: 'epitaph_stats:',
+  COLLECTIVE_GOAL: 'collective_goal:'
 };
+
+// Predefined warnings/markers
+export const PREDEFINED_MARKERS = [
+  "Trap!",
+  "Dead end",
+  "Heal here",
+  "Boss route",
+  "I regret everything"
+] as const;
+
+// Predefined death causes/epitaphs
+export const PREDEFINED_DEATH_CAUSES = [
+  "Greed",
+  "Spike Trap",
+  "Guard Corner"
+] as const;
+
+export const MAX_TACTICAL_MARKERS = 50;
 
 // Allowed card effects (from docs/03-architecture.md)
 export const ALLOWED_CARD_EFFECTS = ['heal', 'damage_bonus', 'speed_bonus'] as const;

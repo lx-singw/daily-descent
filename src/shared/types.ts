@@ -34,14 +34,13 @@ export interface LeaderboardEntry {
   verified: boolean; // anti-cheat verification status
 }
 
-export interface SpiritMessage {
+export interface TacticalMarker {
   id: string;
   author: string;
   commentId?: string; // Reddit comment ID if posted to Reddit
   x: number;
   y: number;
-  message: string;
-  votes: number;
+  markerId: number; // index of PREDEFINED_MARKERS
   timestamp: number;
 }
 

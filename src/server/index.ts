@@ -6,6 +6,7 @@ import { validateAndDecodePath } from './pipeline/pathValidator.js';
 import { DungeonGenerator } from '../shared/DungeonGenerator.js';
 import { REDIS_PREFIX } from '../shared/constants.js';
 import { RunResult } from '../shared/types.js';
+import { seedDemoData } from '../../scripts/seed-demo-data.js';
 
 const app = express();
 app.use(express.json());
@@ -21,7 +22,47 @@ app.get('/api/seed', async (req, res) => {
     const dateKey = getUtcDateKey();
     const seed = await getOrCreateDailySeed(context, postId, dateKey);
     
-    res.json({ seed, dateKey });
+    // Check yesterday's collective goal progress
+    const yesterday = new Date(Date.now() - 86400000);
+    const yesterdayKey = getUtcDateKey(yesterday);
+    const goalKey = `${REDIS_PREFIX.COLLECTIVE_GOAL}${postId}:${yesterdayKey}`;
+    const goalProgressStr = await redis.get(goalKey);
+    const goalProgress = parseInt(goalProgressStr || '0', 10);
+    const collectiveGoalMet = goalProgress >= 25;
+
+    // Get today's leader endpoint (Last Survivor)
+    const leaderEndpointKey = `${REDIS_PREFIX.SEED}leader_endpoint:${postId}:${dateKey}`;
+    const leaderEndpointStr = await redis.get(leaderEndpointKey);
+    let leaderEndpoint = null;
+    if (leaderEndpointStr) {
+      try {
+        leaderEndpoint = JSON.parse(leaderEndpointStr);
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Get today's epitaph statistics
+    const epitaphKey = `${REDIS_PREFIX.EPITAPH_STATS}${postId}:${dateKey}`;
+    const epitaphStatsRaw = await redis.hGetAll(epitaphKey) || {};
+    const epitaphStats: Record<string, number> = {};
+    for (const key of Object.keys(epitaphStatsRaw)) {
+      epitaphStats[key] = parseInt(epitaphStatsRaw[key] || '0', 10);
+    }
+
+    // Get today's collective goal progress count
+    const todayGoalKey = `${REDIS_PREFIX.COLLECTIVE_GOAL}${postId}:${dateKey}`;
+    const todayGoalProgressStr = await redis.get(todayGoalKey);
+    const todayGoalProgress = parseInt(todayGoalProgressStr || '0', 10);
+
+    res.json({
+      seed,
+      dateKey,
+      collectiveGoalMet,
+      todayGoalProgress,
+      leaderEndpoint,
+      epitaphStats
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch seed' });
   }
@@ -120,9 +161,47 @@ app.post('/api/run', async (req, res) => {
 
     await submitRun(context, postId, dateKey, run, pathResult.valid);
 
-    // E. Set rate limit key for today
+    // E. Save Epitaph Statistics
+    if (deathCause) {
+      const epitaphKey = `${REDIS_PREFIX.EPITAPH_STATS}${postId}:${dateKey}`;
+      await redis.hIncrBy(epitaphKey, deathCause, 1);
+    }
+
+    // F. Update Collective daily goal progress if room >= 5 (depth >= 5)
+    if (run.depth >= 5) {
+      const todayGoalKey = `${REDIS_PREFIX.COLLECTIVE_GOAL}${postId}:${dateKey}`;
+      await redis.incrBy(todayGoalKey, 1);
+    }
+
+    // G. Check if this is the new daily best run for the "Last Survivor" silhouette
+    const leaderEndpointKey = `${REDIS_PREFIX.SEED}leader_endpoint:${postId}:${dateKey}`;
+    const currentLeaderStr = await redis.get(leaderEndpointKey);
+    let shouldUpdateLeader = true;
+    if (currentLeaderStr) {
+      try {
+        const currentLeader = JSON.parse(currentLeaderStr);
+        if (run.depth < currentLeader.depth) {
+          shouldUpdateLeader = false;
+        } else if (run.depth === currentLeader.depth && run.duration >= currentLeader.duration) {
+          shouldUpdateLeader = false;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    if (shouldUpdateLeader && deathLocation) {
+      const leaderData = {
+        x: deathLocation.x,
+        y: deathLocation.y,
+        username,
+        depth: run.depth,
+        duration: run.duration
+      };
+      await redis.set(leaderEndpointKey, JSON.stringify(leaderData));
+    }
+
+    // H. Set rate limit key for today
     if (username !== 'anonymous') {
-      // Expiration time set to 24 hours to cover date rollover
       await redis.set(playedCheckKey, 'true', {
         expiration: new Date(Date.now() + 86400000)
       });
@@ -134,9 +213,8 @@ app.post('/api/run', async (req, res) => {
   }
 });
 
-// 5. POST /api/spirit-message - Post a Spirit Message as a Reddit Comment
-// Expects an explicit manual trigger from the webview client
-app.post('/api/spirit-message', async (req, res) => {
+// 5. POST /api/marker - Submit a Tactical Warning Marker
+app.post('/api/marker', async (req, res) => {
   try {
     const postId = context.postId;
     const currentUser = await reddit.getCurrentUser();
@@ -146,48 +224,71 @@ app.post('/api/spirit-message', async (req, res) => {
       return res.status(400).json({ error: 'Missing postId' });
     }
 
-    const { message, x, y, deathCause } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: 'Missing message content' });
+    const { markerId, x, y, postComment } = req.body;
+    if (markerId === undefined || x === undefined || y === undefined) {
+      return res.status(400).json({ error: 'Missing markerId, x, or y' });
     }
 
-    // Format spirit message text
-    const commentText = `[Spirit Message] "${message}"\n- Died at Tile (${x}, ${y}) due to: ${deathCause || 'unknown'}`;
-
-    // Post to Reddit as USER (runAs: 'USER') for attributable user content
-    const comment = await reddit.submitComment({
-      id: postId,
-      text: commentText,
-      runAs: 'USER'
-    });
-
-    // Also store locally in Redis to render in-game at specific coordinates
     const dateKey = getUtcDateKey();
-    const messageKey = `${REDIS_PREFIX.SPIRIT_MESSAGES}${postId}:${dateKey}`;
-    const localMessage = {
-      id: comment.id,
+    const markerKey = `${REDIS_PREFIX.TACTICAL_MARKERS}${postId}:${dateKey}`;
+
+    const mid = parseInt(markerId, 10);
+    const mx = parseInt(x, 10) || 0;
+    const my = parseInt(y, 10) || 0;
+
+    let commentId = undefined;
+
+    // Optional: post comment to Reddit thread via User Action
+    if (postComment && username !== 'anonymous') {
+      const PREDEFINED_MARKERS = ["Trap!", "Dead end", "Heal here", "Boss route", "I regret everything"];
+      const markerText = PREDEFINED_MARKERS[mid] || 'warning';
+      const commentText = `[Tactical Warning] "${markerText}" left at Tile (${mx}, ${my}) by u/${username}`;
+      try {
+        const comment = await reddit.submitComment({
+          id: postId,
+          text: commentText,
+          runAs: 'USER'
+        });
+        commentId = comment.id;
+      } catch (commentErr: any) {
+        console.error('Failed to post comment:', commentErr);
+      }
+    }
+
+    const newMarker = {
+      id: `m_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       author: username,
-      commentId: comment.id,
-      x: parseInt(x, 10) || 0,
-      y: parseInt(y, 10) || 0,
-      message,
-      votes: 0,
+      commentId,
+      x: mx,
+      y: my,
+      markerId: mid,
       timestamp: Date.now()
     };
 
-    await redis.zAdd(messageKey, {
-      member: JSON.stringify(localMessage),
+    // Store in a sorted set (scored by timestamp)
+    await redis.zAdd(markerKey, {
+      member: JSON.stringify(newMarker),
       score: Date.now()
     });
 
-    res.json({ success: true, commentId: comment.id });
+    // Enforce FIFO limit of 50 markers per day
+    const totalMarkers = await redis.zCard(markerKey);
+    if (totalMarkers > 50) {
+      const overflowCount = totalMarkers - 50;
+      const oldestMarkers = await redis.zRange(markerKey, 0, overflowCount - 1, { by: 'rank' });
+      if (oldestMarkers.length > 0) {
+        await redis.zRem(markerKey, oldestMarkers);
+      }
+    }
+
+    res.json({ success: true, marker: newMarker });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to post spirit message' });
+    res.status(500).json({ error: err.message || 'Failed to submit marker' });
   }
 });
 
-// 6. GET /api/spirit-messages - Fetch today's local spirit messages
-app.get('/api/spirit-messages', async (req, res) => {
+// 6. GET /api/markers - Fetch today's tactical warning markers
+app.get('/api/markers', async (req, res) => {
   try {
     const postId = context.postId;
     if (!postId) {
@@ -195,10 +296,10 @@ app.get('/api/spirit-messages', async (req, res) => {
     }
 
     const dateKey = getUtcDateKey();
-    const messageKey = `${REDIS_PREFIX.SPIRIT_MESSAGES}${postId}:${dateKey}`;
+    const markerKey = `${REDIS_PREFIX.TACTICAL_MARKERS}${postId}:${dateKey}`;
     
-    const messagesJson = await redis.zRange(messageKey, 0, -1, { by: 'rank' });
-    const messages = messagesJson.map((str) => {
+    const markersJson = await redis.zRange(markerKey, 0, -1, { by: 'rank' });
+    const markers = markersJson.map((str) => {
       try {
         return JSON.parse(str);
       } catch {
@@ -206,9 +307,24 @@ app.get('/api/spirit-messages', async (req, res) => {
       }
     }).filter(Boolean);
 
-    res.json({ messages });
+    res.json({ markers });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch spirit messages' });
+    res.status(500).json({ error: err.message || 'Failed to fetch markers' });
+  }
+});
+
+// 7. POST /api/seed-demo - Populate daily seeds, ghosts, and stats with mock demo data
+app.post('/api/seed-demo', async (req, res) => {
+  try {
+    const postId = context.postId;
+    if (!postId) {
+      return res.status(400).json({ error: 'Missing postId' });
+    }
+
+    const success = await seedDemoData(context, postId);
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to seed demo data' });
   }
 });
 
