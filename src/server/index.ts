@@ -4,8 +4,8 @@ import { getUtcDateKey, getOrCreateDailySeed } from './generation/seedRotation.j
 import { submitRun, getDailyLeaderboard, getDailyGhostTrails } from './storage/runStore.js';
 import { validateAndDecodePath } from './pipeline/pathValidator.js';
 import { DungeonGenerator } from '../shared/DungeonGenerator.js';
-import { REDIS_PREFIX, TTL_DAILY_KEYS_SEC, TTL_TACTICAL_MARKERS_SEC, TTL_RUN_TOKEN_SEC, PREDEFINED_DEATH_CAUSES } from '../shared/constants.js';
-import { RunResult } from '../shared/types.js';
+import { MAX_TACTICAL_MARKERS, MAX_TACTICAL_MARKERS_PER_USER_DAILY, PREDEFINED_DEATH_CAUSES, PREDEFINED_MARKERS, REDIS_PREFIX, TTL_DAILY_KEYS_SEC, TTL_MARKER_ENTITLEMENT_SEC, TTL_RUN_TOKEN_SEC, TTL_SUBMISSION_LOCK_SEC, TTL_TACTICAL_MARKERS_SEC } from '../shared/constants.js';
+import { deriveDepth, RunResult, TacticalMarker } from '../shared/types.js';
 
 const app = express();
 app.use(express.json());
@@ -156,22 +156,17 @@ app.post('/api/run', async (req, res) => {
       return res.status(400).json({ error: 'seed_mismatch', message: 'Seed does not match registered token.' });
     }
 
-    // Consume token immediately
-    await redis.del(tokenKey);
+    const submissionLockKey = `${REDIS_PREFIX.SEED}run_lock:${postId}:${runToken}`;
+    const lockAcquired = await redis.set(submissionLockKey, 'true', {
+      nx: true,
+      expiration: new Date(Date.now() + TTL_SUBMISSION_LOCK_SEC * 1000)
+    });
+    if (!lockAcquired) {
+      return res.status(409).json({ error: 'submission_in_progress', message: 'This run is already being verified. Retry shortly.' });
+    }
 
     const dateKey = getUtcDateKey(new Date(tokenData.startTimestamp));
-
-    // B. Check rate limits atomically using SETNX for authenticated ranked players
     const playedCheckKey = `${REDIS_PREFIX.LEADERBOARD}played:${postId}:${dateKey}:${username}`;
-    if (username !== 'anonymous') {
-      const setnxSuccess = await redis.set(playedCheckKey, 'true', {
-        nx: true,
-        expiration: new Date(Date.now() + 86400000)
-      });
-      if (!setnxSuccess) {
-        return res.status(403).json({ error: 'already_submitted', message: 'You have already submitted a ranked run today.' });
-      }
-    }
 
     // C. Reconstruct and validate path using seed-derived layout
     const generator = new DungeonGenerator(seed);
@@ -180,14 +175,12 @@ app.post('/api/run', async (req, res) => {
 
     // Validate coordinate boundaries and deathCause values
     if (deathCause && !PREDEFINED_DEATH_CAUSES.includes(deathCause)) {
-      if (username !== 'anonymous') await redis.del(playedCheckKey); // refund played key
       return res.status(400).json({ error: 'invalid_death_cause', message: 'Death cause is not supported.' });
     }
 
     if (deathLocation) {
       const { x, y } = deathLocation;
       if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= 60 || y < 0 || y >= 60) {
-        if (username !== 'anonymous') await redis.del(playedCheckKey);
         return res.status(400).json({ error: 'invalid_death_location', message: 'Death coordinates out of bounds.' });
       }
     }
@@ -209,8 +202,8 @@ app.post('/api/run', async (req, res) => {
     // D. Extract coordinates and derive statistics completely server-side
     const steps = pathResult.decodedTrail!.steps;
     const finalStep = steps[steps.length - 1];
-    const derivedDepth = Math.max(1, Math.floor((finalStep.x + finalStep.y) / 10));
-    const derivedDuration = finalStep.t; // time offset of the final step in the path log
+    const derivedDepth = deriveDepth(expectedStart, finalStep);
+    const derivedDuration = finalStep.t; // final checkpoint offset is authoritative gameplay duration
 
     const run: RunResult = {
       username,
@@ -223,9 +216,25 @@ app.post('/api/run', async (req, res) => {
       seed
     };
 
-    // Anonymous players can play casual runs but are excluded from ranked persistence.
+    let markerEntitlement: string | undefined;
+
+    // Anonymous players can play verified casual runs but are excluded from ranked persistence.
     if (username !== 'anonymous') {
-      await submitRun(redis, postId, dateKey, run, pathResult.valid);
+      const attemptReserved = await redis.set(playedCheckKey, 'true', {
+        nx: true,
+        expiration: new Date(Date.now() + TTL_DAILY_KEYS_SEC * 1000)
+      });
+      if (!attemptReserved) {
+        await redis.del(submissionLockKey);
+        return res.status(403).json({ error: 'already_submitted', message: 'You have already submitted a ranked run today.' });
+      }
+
+      try {
+        await submitRun(redis, postId, dateKey, run, true);
+      } catch (error) {
+        await redis.del(playedCheckKey);
+        throw error;
+      }
 
       // E. Save Epitaph Statistics
       if (deathCause) {
@@ -268,9 +277,18 @@ app.post('/api/run', async (req, res) => {
         await redis.set(leaderEndpointKey, JSON.stringify(leaderData));
         await redis.expire(leaderEndpointKey, TTL_DAILY_KEYS_SEC);
       }
+
+      markerEntitlement = `me_${crypto.randomUUID()}`;
+      const entitlementKey = `${REDIS_PREFIX.TACTICAL_MARKERS}entitlement:${postId}:${markerEntitlement}`;
+      await redis.set(entitlementKey, JSON.stringify({ username, dateKey, seed, x: finalStep.x, y: finalStep.y }), {
+        expiration: new Date(Date.now() + TTL_MARKER_ENTITLEMENT_SEC * 1000)
+      });
     }
 
-    res.json({ success: true, verified: pathResult.valid, depth: derivedDepth, duration: derivedDuration });
+    await redis.del(tokenKey);
+    await redis.del(submissionLockKey);
+    const leaderboard = username === 'anonymous' ? undefined : await getDailyLeaderboard(redis, postId, dateKey);
+    res.json({ success: true, verified: true, ranked: username !== 'anonymous', depth: derivedDepth, duration: derivedDuration, markerEntitlement, leaderboard });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to submit run' });
   }
@@ -292,32 +310,39 @@ app.post('/api/marker', async (req, res) => {
       return res.status(403).json({ error: 'unauthenticated', message: 'You must be logged in to leave warnings.' });
     }
 
-    const { markerId, x, y, postComment } = req.body;
-    if (markerId === undefined || x === undefined || y === undefined) {
-      return res.status(400).json({ error: 'Missing markerId, x, or y' });
+    const { markerId, entitlement, postComment } = req.body;
+    if (markerId === undefined || !entitlement) {
+      return res.status(400).json({ error: 'missing_entitlement', message: 'A verified run entitlement is required.' });
     }
 
-    const mid = parseInt(markerId, 10);
-    const mx = parseInt(x, 10);
-    const my = parseInt(y, 10);
-
-    // Validate bounds and IDs
-    if (isNaN(mid) || mid < 0 || mid > 4) {
-      return res.status(400).json({ error: 'invalid_marker_id', message: 'Marker ID must be between 0 and 4.' });
-    }
-    if (isNaN(mx) || isNaN(my) || mx < 0 || mx >= 60 || my < 0 || my >= 60) {
-      return res.status(400).json({ error: 'invalid_coordinates', message: 'Coordinates out of map bounds.' });
+    const mid = Number(markerId);
+    if (!Number.isInteger(mid) || mid < 0 || mid >= PREDEFINED_MARKERS.length) {
+      return res.status(400).json({ error: 'invalid_marker_id', message: 'Marker ID is not supported.' });
     }
 
-    const dateKey = getUtcDateKey();
+    const entitlementKey = `${REDIS_PREFIX.TACTICAL_MARKERS}entitlement:${postId}:${entitlement}`;
+    const entitlementRaw = await redis.get(entitlementKey);
+    if (!entitlementRaw) {
+      return res.status(409).json({ error: 'invalid_entitlement', message: 'This warning opportunity has expired or was already used.' });
+    }
+    const entitlementData = JSON.parse(entitlementRaw);
+    if (entitlementData.username !== username) {
+      return res.status(403).json({ error: 'entitlement_owner_mismatch', message: 'This warning opportunity belongs to another delver.' });
+    }
+
+    const { dateKey, x: mx, y: my } = entitlementData;
     const markerKey = `${REDIS_PREFIX.TACTICAL_MARKERS}${postId}:${dateKey}`;
+    const userLimitKey = `${REDIS_PREFIX.TACTICAL_MARKERS}user:${postId}:${dateKey}:${username}`;
+    const userMarkerCount = Number(await redis.get(userLimitKey) || '0');
+    if (userMarkerCount >= MAX_TACTICAL_MARKERS_PER_USER_DAILY) {
+      return res.status(429).json({ error: 'marker_limit', message: 'You have left the maximum number of warnings today.' });
+    }
 
     let commentId = undefined;
 
     // Optional: post comment to Reddit thread via User Action
     if (postComment) {
-      const PREDEFINED_MARKERS = ["Trap!", "Dead end", "Heal here", "Boss route", "I regret everything"];
-      const markerText = PREDEFINED_MARKERS[mid] || 'warning';
+      const markerText = PREDEFINED_MARKERS[mid];
       const commentText = `[Tactical Warning] "${markerText}" left at Tile (${mx}, ${my}) by u/${username}`;
       try {
         const comment = await reddit.submitComment({
@@ -347,11 +372,14 @@ app.post('/api/marker', async (req, res) => {
       score: Date.now()
     });
     await redis.expire(markerKey, TTL_TACTICAL_MARKERS_SEC);
+    await redis.incrBy(userLimitKey, 1);
+    await redis.expire(userLimitKey, TTL_DAILY_KEYS_SEC);
+    await redis.del(entitlementKey);
 
-    // Enforce FIFO limit of 50 markers per day
+    // Enforce FIFO limit for markers per day
     const totalMarkers = await redis.zCard(markerKey);
-    if (totalMarkers > 50) {
-      const overflowCount = totalMarkers - 50;
+    if (totalMarkers > MAX_TACTICAL_MARKERS) {
+      const overflowCount = totalMarkers - MAX_TACTICAL_MARKERS;
       const oldestMarkers = await redis.zRange(markerKey, 0, overflowCount - 1, { by: 'rank' });
       if (oldestMarkers.length > 0) {
         await redis.zRem(markerKey, oldestMarkers.map((entry) => entry.member));
@@ -378,11 +406,16 @@ app.get('/api/markers', async (req, res) => {
     const markersJson = await redis.zRange(markerKey, 0, -1, { by: 'rank' });
     const markers = markersJson.map((entry) => {
       try {
-        return JSON.parse(entry.member);
+        const marker = JSON.parse(entry.member) as TacticalMarker;
+        return typeof marker.id === 'string' && typeof marker.author === 'string' &&
+          Number.isInteger(marker.x) && Number.isInteger(marker.y) &&
+          Number.isInteger(marker.markerId) && marker.markerId >= 0 && marker.markerId < PREDEFINED_MARKERS.length
+          ? marker
+          : null;
       } catch {
         return null;
       }
-    }).filter(Boolean);
+    }).filter((marker): marker is TacticalMarker => marker !== null);
 
     res.json({ markers });
   } catch (err: any) {

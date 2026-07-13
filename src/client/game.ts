@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DungeonGenerator, SeededRandom } from '../shared/DungeonGenerator.js';
 import type { BootstrapData, GameEvents, Loadout, RunSummary } from './models.js';
+import { deriveDepth } from '../shared/types.js';
 
 const TILE = 30;
 const COLORS = { void: 0x090b0a, floor: 0x171a17, floorAlt: 0x1e211c, wall: 0x33372f, edge: 0xc86d3c, ember: 0xef8a4c, bone: 0xf0eadb, acid: 0xb7ce63, danger: 0xdb4f70, ghost: 0x78d8cb };
@@ -135,7 +136,7 @@ class DescentScene extends Phaser.Scene {
     if(event==='spike') { this.hazards.delete(`${this.position.x},${this.position.y}`); this.health-=this.loadout==='ward'&&this.health===3?0:1; this.cameras.main.flash(100,219,79,112); this.cameras.main.shake(180,.007); this.eventsApi.onMessage(this.health===3?'The Ash Ward breaks. You remain standing.':'A buried mechanism drinks the light.'); }
     if(event==='relic'){this.hazards.delete(`${this.position.x},${this.position.y}`);this.relics++;this.eventsApi.onMessage('Recovered: a fallen delver’s ember. The expedition remembers.');}
     if(event==='shrine'){this.hazards.delete(`${this.position.x},${this.position.y}`);if(this.health<3)this.health++;this.eventsApi.onMessage('The Ember Shrine answers every delver differently.');}
-    const depth=Math.max(1,Math.floor((Math.abs(this.position.x-this.start.x)+Math.abs(this.position.y-this.start.y))/5)+1);
+    const depth=deriveDepth(this.start,this.position);
     this.eventsApi.onStats(depth,this.health,this.relics);
     if(this.health<=0 || depth>=12) this.finish(depth,this.health<=0?'Spike Trap':'The Twelfth Gate');
   }

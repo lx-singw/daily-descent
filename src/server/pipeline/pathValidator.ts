@@ -1,5 +1,5 @@
 import { Position, DecodedGhostStep, DecodedGhostTrail } from '../../shared/types.js';
-import { MOVE_INTERVAL_MIN_MS, MAX_MOVE_LOG_BYTES, MAX_MOVE_STEPS } from '../../shared/constants.js';
+import { DUNGEON_HEIGHT, DUNGEON_WIDTH, MOVE_INTERVAL_MIN_MS, MAX_MOVE_LOG_BYTES, MAX_MOVE_STEPS, RUN_REQUEST_LATENCY_ALLOWANCE_MS } from '../../shared/constants.js';
 
 export interface PathValidationResult {
   valid: boolean;
@@ -107,7 +107,7 @@ export function validateAndDecodePath(
   const startY = parseFloat(headerParts[1]);
   const startTimeMs = parseFloat(headerParts[2]);
 
-  if (isNaN(startX) || isNaN(startY) || isNaN(startTimeMs)) {
+  if (!Number.isFinite(startX) || !Number.isFinite(startY) || !Number.isFinite(startTimeMs) || !Number.isInteger(startTimeMs) || startTimeMs < 0) {
     return { valid: false, reason: 'Invalid header values' };
   }
 
@@ -116,7 +116,7 @@ export function validateAndDecodePath(
     return { valid: false, reason: 'Header coordinates must be integers' };
   }
 
-  if (startX < 0 || startX >= 60 || startY < 0 || startY >= 60) {
+  if (startX < 0 || startX >= DUNGEON_WIDTH || startY < 0 || startY >= DUNGEON_HEIGHT) {
     return { valid: false, reason: 'Header coordinates out of map bounds' };
   }
 
@@ -157,12 +157,18 @@ export function validateAndDecodePath(
         return { valid: false, reason: `Malformed checkpoint: ${segment}` };
       }
 
-      const cpX = parseInt(checkpointParts[1], 10);
-      const cpY = parseInt(checkpointParts[2], 10);
-      const cpOffsetMs = parseInt(checkpointParts[3], 10);
+      const cpX = Number(checkpointParts[1]);
+      const cpY = Number(checkpointParts[2]);
+      const cpOffsetMs = Number(checkpointParts[3]);
 
-      if (isNaN(cpX) || isNaN(cpY) || isNaN(cpOffsetMs)) {
+      if (![cpX, cpY, cpOffsetMs].every(Number.isFinite) || ![cpX, cpY, cpOffsetMs].every(Number.isInteger) || cpOffsetMs < 0) {
         return { valid: false, reason: `Invalid checkpoint numeric values: ${segment}` };
+      }
+      if (movesSinceLastCheckpoint === 0) {
+        return { valid: false, reason: 'Checkpoint must follow at least one move' };
+      }
+      if (cpOffsetMs < lastCheckpointOffsetMs) {
+        return { valid: false, reason: 'Checkpoint timestamps must be monotonic' };
       }
 
       // 1. Verify coordinate match
@@ -233,6 +239,10 @@ export function validateAndDecodePath(
     }
   }
 
+  if (totalStepsCount === 0 || movesSinceLastCheckpoint !== 0 || !segments.at(-1)?.startsWith('C,')) {
+    return { valid: false, reason: 'Move log must end with a checkpoint after at least one move' };
+  }
+
   // Perform linear interpolation of intermediate step timestamps between checkpoints
   let lastKnownCpIndex = 0;
   for (let idx = 0; idx < decodedSteps.length; idx++) {
@@ -268,14 +278,14 @@ export function validateAndDecodePath(
     }
   }
 
-  // 4. Verify overall run duration
+  // Server elapsed time includes briefing time before gameplay starts. It can only
+  // prove that the client path duration was not impossibly longer than the token age.
   if (expectedDurationMs !== undefined) {
-    // Expected duration should be within reasonable margin of decoded path duration (e.g. within 2 seconds)
     const finalOffset = decodedSteps[decodedSteps.length - 1].t;
-    if (Math.abs(finalOffset - expectedDurationMs) > 2000) {
+    if (!Number.isFinite(expectedDurationMs) || expectedDurationMs < 0 || finalOffset > expectedDurationMs + RUN_REQUEST_LATENCY_ALLOWANCE_MS) {
       return {
         valid: false,
-        reason: `Duration mismatch. Reported duration: ${expectedDurationMs}ms, Path duration: ${finalOffset}ms`
+        reason: `Duration is not plausible. Server elapsed: ${expectedDurationMs}ms, Path duration: ${finalOffset}ms`
       };
     }
   }

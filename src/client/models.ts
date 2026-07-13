@@ -33,6 +33,16 @@ export interface RunSummary {
   warningsSeen: number;
 }
 
+export interface RunSubmissionResponse {
+  success: true;
+  verified: true;
+  ranked: boolean;
+  depth: number;
+  duration: number;
+  markerEntitlement?: string;
+  leaderboard?: LeaderboardEntry[];
+}
+
 export interface GameEvents {
   onStats: (depth: number, health: number, relics: number) => void;
   onFinish: (summary: RunSummary) => void;

@@ -9,12 +9,19 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          return id.includes('/node_modules/phaser/') ? 'phaser' : undefined;
+        },
+      },
+    },
   },
   server: {
     host: '0.0.0.0',
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api/': 'http://localhost:3000',
     },
   },
 });
