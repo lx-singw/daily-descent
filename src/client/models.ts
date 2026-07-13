@@ -7,6 +7,7 @@ export type Loadout = 'ward' | 'thread' | 'spark';
 export interface SeedResponse {
   seed: string;
   dateKey: string;
+  runToken: string;
   collectiveGoalMet: boolean;
   todayGoalProgress: number;
   leaderEndpoint: (Position & { username: string; depth: number; duration: number }) | null;

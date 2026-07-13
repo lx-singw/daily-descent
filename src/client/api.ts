@@ -23,10 +23,10 @@ export async function loadBootstrap(): Promise<BootstrapData> {
   return { seed, leaderboard: leaderboard.leaderboard, ghosts: ghosts.ghosts, markers: markers.markers };
 }
 
-export function submitRun(summary: RunSummary, seed: string) {
+export function submitRun(summary: RunSummary, seed: string, runToken: string) {
   return request<{ success: boolean }>('/api/run', {
     method: 'POST',
-    body: JSON.stringify({ depth: summary.depth, duration: summary.duration, deathLocation: summary.position, deathCause: summary.cause, moveLog: summary.moves, seed }),
+    body: JSON.stringify({ runToken, depth: summary.depth, duration: summary.duration, deathLocation: summary.position, deathCause: summary.cause, moveLog: summary.moves, seed }),
   });
 }
 
