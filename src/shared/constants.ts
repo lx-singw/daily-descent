@@ -41,6 +41,12 @@ export const PREDEFINED_DEATH_CAUSES = [
 
 export const MAX_TACTICAL_MARKERS = 50;
 
+// Key TTL values in seconds
+export const TTL_DAILY_KEYS_SEC = 30 * 24 * 3600; // 30 days
+export const TTL_GHOST_TRAILS_SEC = 7 * 24 * 3600; // 7 days
+export const TTL_TACTICAL_MARKERS_SEC = 7 * 24 * 3600; // 7 days
+export const TTL_RUN_TOKEN_SEC = 3600; // 1 hour
+
 // Allowed card effects (from docs/03-architecture.md)
 export const ALLOWED_CARD_EFFECTS = ['heal', 'damage_bonus', 'speed_bonus'] as const;
 export type AllowedCardEffect = typeof ALLOWED_CARD_EFFECTS[number];

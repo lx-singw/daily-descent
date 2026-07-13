@@ -1,6 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
 import { getOrCreateDailySeed, validateRunSeed, getUtcDateKey } from '../../src/server/generation/seedRotation.js';
-import { Devvit } from '@devvit/public-api';
 
 class MockRedis {
   public store = new Map<string, string>();
@@ -27,11 +26,6 @@ class MockRedis {
 describe('Lazy Seed Rotation & Rollover Locks', () => {
   test('should generate and return seed on first load', async () => {
     const mockRedis = new MockRedis();
-    const mockContext = {
-      redis: mockRedis,
-      postId: 't3_testpost'
-    } as unknown as Devvit.Context;
-
     const dateKey = '2026-07-13';
     const seed = await getOrCreateDailySeed(mockRedis, 't3_testpost', dateKey);
 
@@ -43,11 +37,6 @@ describe('Lazy Seed Rotation & Rollover Locks', () => {
 
   test('should return existing seed on subsequent loads without generating new one', async () => {
     const mockRedis = new MockRedis();
-    const mockContext = {
-      redis: mockRedis,
-      postId: 't3_testpost'
-    } as unknown as Devvit.Context;
-
     const dateKey = '2026-07-13';
     const firstSeed = await getOrCreateDailySeed(mockRedis, 't3_testpost', dateKey);
     
@@ -60,11 +49,6 @@ describe('Lazy Seed Rotation & Rollover Locks', () => {
 
   test('should support mid-run midnight crossings for run validation', async () => {
     const mockRedis = new MockRedis();
-    const mockContext = {
-      redis: mockRedis,
-      postId: 't3_testpost'
-    } as unknown as Devvit.Context;
-
     // Simulate current time: July 13th 00:05 UTC.
     // Run started on July 12th 23:55 UTC (timestamp = July 12).
     const runTimestamp = new Date('2026-07-12T23:55:00Z').getTime();

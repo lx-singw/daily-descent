@@ -15,7 +15,7 @@ export function compressPath(
   startX: number,
   startY: number,
   startTimeMs: number,
-  steps: { x: number; y: number; t: number }[] // t is offset in ms from start
+  steps: { x: number; y: number; t: number }[]
 ): string {
   if (steps.length === 0) {
     return `${startX},${startY},${startTimeMs}:`;
@@ -81,7 +81,8 @@ export function validateAndDecodePath(
   username: string,
   isTileWalkable: (x: number, y: number) => boolean,
   expectedEndPosition?: Position,
-  expectedDurationMs?: number
+  expectedDurationMs?: number,
+  expectedStartPosition?: Position
 ): PathValidationResult {
   if (!moveLog) {
     return { valid: false, reason: 'Empty move log' };
@@ -102,12 +103,30 @@ export function validateAndDecodePath(
     return { valid: false, reason: 'Invalid header: must contain startX, startY, and startTime' };
   }
 
-  const startX = parseInt(headerParts[0], 10);
-  const startY = parseInt(headerParts[1], 10);
-  const startTimeMs = parseInt(headerParts[2], 10);
+  const startX = parseFloat(headerParts[0]);
+  const startY = parseFloat(headerParts[1]);
+  const startTimeMs = parseFloat(headerParts[2]);
 
   if (isNaN(startX) || isNaN(startY) || isNaN(startTimeMs)) {
     return { valid: false, reason: 'Invalid header values' };
+  }
+
+  // Check integer type & bounds
+  if (!Number.isInteger(startX) || !Number.isInteger(startY)) {
+    return { valid: false, reason: 'Header coordinates must be integers' };
+  }
+
+  if (startX < 0 || startX >= 60 || startY < 0 || startY >= 60) {
+    return { valid: false, reason: 'Header coordinates out of map bounds' };
+  }
+
+  if (expectedStartPosition) {
+    if (startX !== expectedStartPosition.x || startY !== expectedStartPosition.y) {
+      return {
+        valid: false,
+        reason: `Invalid starting position. Expected (${expectedStartPosition.x}, ${expectedStartPosition.y}), got (${startX}, ${startY})`
+      };
+    }
   }
 
   // Verify starting tile is walkable

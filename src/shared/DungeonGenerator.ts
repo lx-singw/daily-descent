@@ -41,7 +41,7 @@ export class DungeonGenerator {
   public height = 60; // Total dungeon height in tiles
   public grid: number[][]; // 0 = floor/walkable, 1 = wall/blocked
   private rand: SeededRandom;
-  private startPosition = { x: 4, y: 4 };
+  private startPosition: { x: number; y: number } = { x: 4, y: 4 };
 
   constructor(seed: string) {
     this.rand = new SeededRandom(seed);
@@ -83,6 +83,7 @@ export class DungeonGenerator {
       }
     }
 
+    // Determine a dynamic, valid start position (center of first room).
     if (rooms.length > 0) {
       this.startPosition = {
         x: Math.floor(rooms[0].x + rooms[0].w / 2),
