@@ -34,6 +34,9 @@ This is the list of things to test against the *real* Devvit platform before you
 
 - **Marker Spam/Throttling**: While predefined tactical markers eliminate profanity and text abuse, players could spam markers. The backend restricts marker placement to one per run per player, caps stored messages to 50 per date key, and automatically deletes old markers using FIFO eviction.
 - **Empty-Room Problem**: A judge opening the post fresh on day one would see an empty dungeon. The system pre-seeds the persistent post with labeled mock data (ghosts, markers, runs) to ensure immediate visual feedback.
+- **Upvote Scraping Rate Limits (Post-Launch)**: Fetching upvote counts for modifier comment curation could exceed API request limits if performed on demand. The rollover job runs strictly once a day at UTC midnight and caches results.
+- **Faction War Skew (Post-Launch)**: If the size of one faction (e.g., Lurkers) is significantly larger than the other, the faction leaderboard will be permanently unbalanced. We normalize scores using *average depth reached per faction attempt* rather than cumulative sums.
+- **Rescue Spoofing (Platform Bet)**: Players could forged fake rescue requests to boost their reputation profile scores. The path validator ensures that rescue positions coincide with verified historical tombstones before awarding points.
 
 ## Sequence Cut-List (Applying Priority Principle)
 1. **[Platform Bet]** (personalization, automated balance pipelines, cross-game integrations) — deferred immediately.

@@ -3,29 +3,32 @@
 *(internal shorthand: Echo Dungeon: Daily Draft — merge of Echo Dungeon, Daily Dungeon Draft, and Subreddit Dungeon)*
 
 ## One-line pitch
-A daily rogue-lite dungeon crawl where everyone in the subreddit plays the exact same seed, dies to the ghosts of the players before them, leaves tactical warnings at their death location, and works toward a collective community goal.
+A daily rogue-lite dungeon crawl where everyone in the subreddit plays the exact same seed, dies to the ghosts of the players before them, leaves tactical warnings, and collaborates/competes toward community goals and faction wars.
 
 ## The loop, end to end
 
 1. **Midnight (UTC): seed rotation.**
-   The game operates inside a single, persistent pinned post on the subreddit. At midnight UTC, the seed rotates. The client-side generator uses the new seed to render today's dungeon. All leaderboard, ghost trail, and tactical marker data are day-keyed in the persistent post's storage.
+   The game operates inside a single, persistent pinned post on the subreddit. At midnight UTC, the seed rotates. The client-side generator uses the new seed to render today's dungeon. All leaderboard, ghost trail, tactical marker, and faction statistics are day-keyed in the persistent post's storage.
 
 2. **Player opens the post.**
    They see:
    - The dungeon, generated dynamically for today's seed.
    - Ghost trails of a handful of recent runs today (semi-transparent replays showing where past players moved and died).
-   - Tactical warning markers (e.g. "Trap!", "Dead end") left by past players at their exact locations of death.
+   - Predefined tactical warning markers (e.g. "Trap!", "Dead end") left by past players at their exact locations of death.
+   - Today's **Epitaph Statistics** chart (e.g. *"Today Room 4 killed 61%; 40% died of Greed"*).
+   - An ongoing **Faction War** score tracker (Lurkers vs. Posters).
 
 3. **Player descends.**
    Grid-based movement through procedurally generated rooms (Phaser-rendered). Standard rogue-lite tension: limited resources, permadeath for the run, score based on depth reached + time elapsed.
    *Starting loadout parameters (e.g. number of torches) may be boosted by yesterday's completed collective goal.*
+   As they play, they can see the highlighted static **"Last Survivor" silhouette** of the current daily leader. Touching tombstones of players trapped deep in the dungeon triggers a **Daily Rescue** co-op event.
 
 4. **Player dies or reaches the bottom.**
-   - On death: they choose a tactical warning marker (e.g., *"Trap!"*, *"Dead end"*, *"Heal here"*, *"Boss route"*, or *"I regret everything"*) and place it at their death tile, visible to future players today. They can optionally choose to post this as an authenticated Reddit comment.
+   - On death: they choose a tactical warning marker (e.g., *"Trap!"*) and select a predefined death cause/epitaph (e.g., *"Greed got the best of me"*), contributing to today's **Epitaph Statistics**.
    - On success: their time/depth is submitted to today's daily leaderboard.
-   - For all runs: the final room reached contributes to today's **collective community goal** (e.g., *"If 25 players reach Room 5 today, tomorrow's descent begins with one extra torch"*).
+   - For all runs: their progress contributes to today's **collective community goal** and their team's score in the **Faction War**.
 
-5. **Next midnight UTC: repeat**, with a new day key, fresh seed, and a starting perk shaped by yesterday's collective goal achievement.
+5. **Next midnight UTC: repeat**, with a new day key, fresh seed, and tomorrow's starting perk shaped by yesterday's collective goal and native comment curation vote upcounts.
 
 ## Why this loop hits the judging criteria directly
 

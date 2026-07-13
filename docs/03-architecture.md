@@ -39,6 +39,28 @@ Devvit Web lets the game be built as a standard web app (Phaser + whatever frame
 - The backend stores daily progression indices in Redis (e.g. tracking how many players reach Room 5 today).
 - If the daily goal target is achieved (e.g., >= 25 runs reach Room 5), the lazy rollover process for tomorrow's seed applies a starting loadout modifier (e.g. starting with an extra torch or additional +2 HP) dynamically.
 
+### Epitaph Statistics & Death Breakdown [Hackathon Stretch]
+- **Redis Schema:** Today's death causes are stored in a Redis Hash (`daily_descent:epitaphs:postId:YYYY-MM-DD`) where keys are cause IDs and values are increments.
+- **Client Render:** Selected cause from a predefined list (e.g. *Greed*, *Guard*, *Spikes*) is posted via `/api/run`. The landing screen reads this hash to show percentage breakdowns.
+
+### "Last Survivor" Silhouette [Hackathon Stretch]
+- **Redis Schema:** Tracks the absolute coordinates and path of today's best run in a single date-keyed string (`daily_descent:leader_endpoint:postId:YYYY-MM-DD`).
+- **Client Render:** Retrieves the leader's final coordinates during initial seed fetch and renders a highlighted static tombstone/silhouette at that cell.
+
+### Native Comment Curation Upvote Scraper [Post-Launch]
+- **Flow:** The midnight rollover job fetches upvote deltas from the three stickied comments containing tomorrow's gameplay modifiers (using Devvit's Reddit API access).
+- **Storage:** The winning modifier ID is saved to the day's seed metadata (`daily_descent:modifier:postId:YYYY-MM-DD`) to apply layout modifiers.
+
+### Faction Wars [Post-Launch]
+- **Flow:** Player class is inferred from karma and account age metadata:
+  - *Lurkers:* karma < 1,000 and age > 180 days.
+  - *Posters:* All other users.
+- **Storage:** Run depths are accumulated into faction keys (`daily_descent:faction:lurkers:postId:YYYY-MM-DD` and `daily_descent:faction:posters:postId:YYYY-MM-DD`). A real-time progress bar compares team scores.
+
+### The "Daily Rescue" Event [Platform Bet]
+- **Redis Schema:** Tombstones of players who died in deep rooms are pushed to a Redis Sorted Set (`daily_descent:trapped_tombstones:postId:YYYY-MM-DD`).
+- **Flow:** Clients fetch today's trapped coordinates. Touching a trapped tile triggers `/api/rescue`, incrementing the trapped player's reputation points (`daily_descent:reputation:username`) and awarding the rescuer bonus score.
+
 ### Draft pool / comment-derived cards (Tier 2, if time allows)
 - Backend job runs once daily (tied to the seed rotation): fetch top-upvoted comments from *yesterday's* post, run them through a strict regex/format matcher for the `[Card] Name: Effect` pattern.
 - Effects are matched against a small **whitelist** of allowed effect types with numeric parameters only (e.g. `heal:<int>`, `damage_bonus:<int>`, `speed_bonus:<float>`) — never eval free text as logic. Anything that doesn't match the whitelist is silently dropped, not partially applied.

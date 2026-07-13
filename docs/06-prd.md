@@ -54,11 +54,16 @@ We measure community retention and engagement through the following metrics:
 *   **Target:** >25% return rate within the first week of installation.
 
 ### B. Contribution Rate (Reddit Integration)
-*   **Definition:** Percentage of players who complete a run (win/loss) and submit a content contribution.
-    *   **Spirit Message:** Submitting an in-game warning posted as a Reddit comment.
-    *   **Card Draft (Tier 2):** Commenting on the post in the `[Card]` format.
-*   **Target:** >15% contribution rate.
+*   **Definition:** Percentage of players who complete a run (win/loss) and submit a content contribution:
+    *   **Tactical warning marker:** Selecting and placing a predefined warning marker on death.
+    *   **Epitaph choice:** Selecting a predefined death cause to add to Epitaph Statistics.
+    *   **Rescue Event (Platform Bet):** Rescuing trapped player tombstones in-game.
+*   **Target:** >40% contribution rate (due to the low-friction predefined marker + epitaph flow).
 
-### C. Leaderboard Participation
-*   **Definition:** Ratio of unique players who submit a run to total page loads.
+### C. Leaderboard & Faction Participation
+*   **Definition:** Ratio of unique players who submit a run (contributing to their Faction's daily progression) to total page views.
 *   **Target:** >60% of users who load the post submit at least one run.
+
+### D. Modifier Curation Participation (Post-Launch)
+*   **Definition:** Ratio of active players upvoting the stickied curation comment thread.
+*   **Target:** >20% daily voter turnout on stickied modifier comments.
